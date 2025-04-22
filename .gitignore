@@ -1,0 +1,17 @@
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+venv
+env
+/staticfiles
+__pycache__ 
+logs
+/.vscode
+/logs
+
+web.config
+
+.env
+.env.uat
+.env.prod
