@@ -711,7 +711,7 @@ def comapre_verfier_data_with_rules(verifier_id, field_value, design_data, ceram
             except Exception as e:
                 max_value = None
          
-            if (min_value is not None and field_value < min_value) or (max_value is not None and field_value > max_value):
+            if (min_value is not None and field_value < min_value) and (max_value is not None and field_value > max_value):
                 is_deviation = True
                 break
         return is_deviation
