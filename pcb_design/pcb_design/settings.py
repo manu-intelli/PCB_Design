@@ -131,7 +131,7 @@ DATABASES = {
         'PORT': os.getenv('DB_PORT',None),
         'OPTIONS': {
             'autocommit': True,
-            'driver': 'ODBC Driver 17 for SQL Server',
+            'driver': 'ODBC Driver 13 for SQL Server',
             'extra_params': 'DataTypeCompatibility=80;MARS Connection=True;',
             'use_legacy_date_fields': True,
         },
