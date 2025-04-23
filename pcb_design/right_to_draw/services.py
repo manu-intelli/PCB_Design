@@ -698,8 +698,8 @@ def comapre_verfier_data_with_rules(verifier_id, field_value, design_data, ceram
                     right_to_draw_logs.info(f"Dielectric Material is not 'Rogers: RO4350B' and rule number is '4.11.2', So Skipping the Rule")
                     continue            
             design_doc = verifier_rule.design_doc
-            design_doc = design_doc.strip()  
-            section_rule = MstSectionRules.objects.get(rule_number=rule_number, design_doc=design_doc)
+            design_doc = design_doc.strip()
+            section_rule = MstSectionRules.objects.get(rule_number=rule_number, design_doc=design_doc)            
             try:        
                 min_value = float(section_rule.min_value) if section_rule.min_value else None                   
             except Exception as e:
@@ -710,8 +710,7 @@ def comapre_verfier_data_with_rules(verifier_id, field_value, design_data, ceram
                 max_value = float(section_rule.max_value) if section_rule.max_value else None        
             except Exception as e:
                 max_value = None
-         
-            if (min_value is not None and field_value < min_value) and (max_value is not None and field_value > max_value):
+            if (min_value is not None and field_value < min_value) or (max_value is not None and field_value > max_value):
                 is_deviation = True
                 break
         return is_deviation
@@ -744,32 +743,33 @@ def get_category_for_b11_value(design_data):
     return category_b11_val
 
 
-def get_ceramic_reasonator_selected_value(data):
+def get_ceramic_reasonator_selected_value(design_data):
     ceramic_reasonator_val = None
-    for verifier_id, selected_val in data.items():
+    for design_id, sub_category_id in design_data.items():
         try:
-            verifier_id = int(verifier_id)        
+            design_id = int(design_id)        
             try:
-                verifier_field = MstVerifierField.objects.get(id=verifier_id)
+                category_rec = MstCategory.objects.get(id=design_id)
             except ObjectDoesNotExist as ex:
                 continue
-            verifier_field_name = verifier_field.field_name.strip().strip('.').strip().lower()
-            if verifier_field_name == 'enter the ceramic resonator size':
-                ceramic_reasonator_val = selected_val
+            category_name = category_rec.category_name.strip().strip('.').strip().lower()
+            if category_name == 'ceramic resonator size requirement for b11':
+                sub_category_rec = MstSubCategory.objects.get(id=sub_category_id)
+                ceramic_reasonator_val = sub_category_rec.sub_category_name.strip().lower()
+                ceramic_reasonator_val = int(ceramic_reasonator_val)
                 break
         except Exception as ex:
             right_to_draw_logs.info("Unable to fetch the Ceramic Resonator Value")
     return ceramic_reasonator_val
 
-
 def comapre_verfier_data(verified_data, design_data, component_id):
     verifier_res = []
     ceramic_reasonator_value = None
-    component = MstComponent.objects.get(id=component_id)    
+    component = MstComponent.objects.get(id=component_id)  
     if component.component_name.strip().lower() == 'b11':
         category_b11_val = get_category_for_b11_value(design_data)
         if category_b11_val.strip().lower() == 'ceramic resonator technology':
-            ceramic_reasonator_value = get_ceramic_reasonator_selected_value(verified_data)
+            ceramic_reasonator_value = get_ceramic_reasonator_selected_value(design_data)
 
     for id, val in verified_data.items():
         val = float(val)
