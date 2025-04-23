@@ -120,6 +120,10 @@ WSGI_APPLICATION = 'pcb_design.wsgi.application'
 # }
 
 # https://www.dundas.com/support/learning/documentation/installation/how-to-enable-sql-server-authentication#:~:text=In%20the%20Object%20Explorer%2C%20right,the%20server%20and%20click%20Properties.&text=On%20the%20Security%20page%20under,mode%20and%20then%20click%20OK.&text=In%20the%20Object%20Explorer%2C%20right%2Dclick%20your%20server%20and%20click,it%20must%20also%20be%20restarted.
+server_type = os.getenv('SERVERTYPE', 'LOCAL')
+
+# Select appropriate driver based on server type
+odbc_driver = 'ODBC Driver 17 for SQL Server' if server_type == 'LOCAL' else 'ODBC Driver 13 for SQL Server'
 
 DATABASES = {
     'default': {
@@ -131,7 +135,7 @@ DATABASES = {
         'PORT': os.getenv('DB_PORT',None),
         'OPTIONS': {
             'autocommit': True,
-            'driver': 'ODBC Driver 13 for SQL Server',
+            'driver': odbc_driver,
             'extra_params': 'DataTypeCompatibility=80;MARS Connection=True;',
             'use_legacy_date_fields': True,
         },
