@@ -52,7 +52,7 @@ INSTALLED_APPS = [
 # Middleware configuration
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',  # Security middleware
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    # 'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',  # Session handling
     'corsheaders.middleware.CorsMiddleware',  # CORS middleware for cross-origin requests
     'django.middleware.common.CommonMiddleware',  # Common middleware
@@ -63,7 +63,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # Clickjacking protection
 ]
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # Root URL configuration (links to the main URL routing file)
 ROOT_URLCONF = 'pcb_design.urls'
 
