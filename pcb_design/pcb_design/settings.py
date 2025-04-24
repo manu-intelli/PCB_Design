@@ -17,7 +17,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'default-secret-key')
 SERVER_TYPE = os.getenv('SERVER_TYPE', 'LOCAL').upper()
 
 # Debug mode: Set to True for local development
-DEBUG = SERVER_TYPE == 'LOCAL'
+DEBUG = True
 
 # Frontend IP and Port configuration (used for CORS and API requests)
 FRONTEND_IP = os.getenv("FRONTEND_IP", "http://localhost")
