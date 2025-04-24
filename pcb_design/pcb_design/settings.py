@@ -29,7 +29,7 @@ if SERVER_TYPE == 'LOCAL':
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 else:
     # For live servers, allow the production URL and frontend IP
-    ALLOWED_HOSTS = ['pcb-design-5nqf.onrender.com', os.getenv('FRONTEND_IP', '*'),os.getenv('BACKEND_IP', '*')]
+    ALLOWED_HOSTS = ['pcb-design-5nqf.onrender.com','localhost', os.getenv('FRONTEND_IP', '*'),os.getenv('BACKEND_IP', '*')]
 
 # List of installed apps required for the project
 INSTALLED_APPS = [
