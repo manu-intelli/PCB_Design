@@ -167,4 +167,3 @@ else:
 
 # Allow credentials in CORS requests
 CORS_ALLOW_CREDENTIALS = True
-
