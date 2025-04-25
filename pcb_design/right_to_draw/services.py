@@ -902,3 +902,4 @@ def save_approver_results(data, user):
         right_to_draw_logs.error(f"An error occurred while saving approver template: {str(ex)}")
         right_to_draw_logs.info(f"An error occurred while saving approver template: {str(ex)}")
         return None, str(ex)
+    
