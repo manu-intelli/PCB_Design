@@ -294,7 +294,7 @@ def condition_operators(condition, target_value):
 
 def check_conditions(sub_category, category, pcb_specifications_inp):
     res = []
-    pcb_specifications = {int(k):id(v) for k, v in pcb_specifications_inp.items()}    
+    pcb_specifications = {int(k):v for k, v in pcb_specifications_inp.items()}    
     conditions = MstConditions.objects.filter(Q(category=category.pk) | Q(subcategory=sub_category.pk))  
     right_to_draw_logs.info(f"Checking conditions for sub_category: {sub_category.name}, conditions: {len(conditions)}")
     
