@@ -6,7 +6,7 @@ from . import authentication_logs
 
 def get_users():
     try:
-        users = CustomUser.objects.all()
+        users = CustomUser.objects.filter(is_active=True)
         if not users:
             return []
         serializer = GetUserSerializer(users, many=True)

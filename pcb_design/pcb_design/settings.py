@@ -93,7 +93,7 @@ WSGI_APPLICATION = 'pcb_design.wsgi.application'
 AUTH_USER_MODEL = 'authentication.CustomUser'
 
 # Database configuration
-ODBC_DRIVER = 'ODBC Driver 17 for SQL Server' if SERVER_TYPE == 'LOCAL' else 'ODBC Driver 13 for SQL Server'
+ODBC_DRIVER =  'ODBC Driver 17 for SQL Server' if SERVER_TYPE == 'LOCAL' else 'ODBC Driver 17 for SQL Server' if SERVER_NAME == 'PRODUCTION' else 'ODBC Driver 13 for SQL Server'
 
 DATABASES = {
     'default': {
