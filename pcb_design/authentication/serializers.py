@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import Group
 
-from .models import CustomUser
+from .models import CustomUser, Role
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
@@ -20,6 +20,10 @@ class UserSerializer(serializers.ModelSerializer):
         return CustomUser.objects.create_user(**validated_data)
 
  
+def get_valid_role_names():
+    return list(Role.objects.values_list('name', flat=True))
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(
         required=True,
@@ -27,53 +31,72 @@ class RegisterSerializer(serializers.ModelSerializer):
     )
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
-    full_name = serializers.CharField(required=True) 
-  
+    full_name = serializers.CharField(required=True)
+
     class Meta:
         model = CustomUser
-        fields = ( 'password', 'password2', 'email', 'full_name')
-  
+        fields = ('password', 'password2', 'email', 'full_name')
+
     def validate(self, attrs):
         authentication_logs.info(f"Register User Request {attrs['email']}")
         if attrs['password'] != attrs['password2']:
             authentication_logs.error(f"Password fields didn't match. {attrs['email']}")
             raise serializers.ValidationError({"password": "Password fields didn't match."})
 
-        if 'role' in attrs:
-            roles = attrs['role'].split(',')
-            attrs['role'] = [role.strip() for role in roles]
-            authentication_logs.info(f"Role: {attrs['role']}")
-
         return attrs
 
     def create(self, validated_data):
-        authentication_logs.info(f"Register User Request {validated_data['email']}")
+        validated_data.pop('password2', None)
+        authentication_logs.info(f"Register User Create Start: {validated_data['email']}")
+
         user = CustomUser.objects.create(
-            email=validated_data['email']
+            email=validated_data['email'],
+            full_name=validated_data['full_name'],
         )
         user.set_password(validated_data['password'])
-        roles = self.context.get('role', 'CADesigner')
+
+        roles = self.context.get('roles', ['CADesigner'])
         if isinstance(roles, str):
             roles = [roles]
-        
-        is_valid_role_added = False 
-        for role in roles:
-            if role in valid_roles:
-                is_valid_role_added = True                
-                
-                group, created = Group.objects.get_or_create(name=role)
+
+        valid_roles = get_valid_role_names()
+
+        # ✅ Remove "NormalUser" if more than one role is selected
+        cleaned_roles = [role.strip() for role in roles if role.strip()]
+        if len(cleaned_roles) > 1 and 'NormalUser' in cleaned_roles:
+            cleaned_roles.remove('NormalUser')
+
+        valid_assigned_roles = []
+
+        for role_name in cleaned_roles:
+            if role_name in valid_roles:
+                group, _ = Group.objects.get_or_create(name=role_name)
                 user.groups.add(group)
-        
-        user.role = ", ".join(roles)
-        user.full_name = validated_data['full_name']
-        if not is_valid_role_added:
-            role = 'CADesigner'
-            group, created = Group.objects.get_or_create(name=role)
-            user.groups.add(group)           
-        
+
+                role_obj = Role.objects.get(name=role_name)
+                user.roles.add(role_obj)
+
+                valid_assigned_roles.append(role_name)
+            else:
+                authentication_logs.warning(f"Invalid role skipped: {role_name}")
+
+        # ✅ If no valid roles remain after filtering, add "NormalUser"
+        if not valid_assigned_roles:
+            fallback_role = 'NormalUser'
+            group, _ = Group.objects.get_or_create(name=fallback_role)
+            user.groups.add(group)
+            role_obj = Role.objects.get(name=fallback_role)
+            user.roles.add(role_obj)
+            valid_assigned_roles = [fallback_role]
+
         user.save()
-        authentication_logs.info(f"User Registered Successfully: {user.email}")
+
+        authentication_logs.info(f"User Registered Successfully with roles: {valid_assigned_roles}")
         return user
+
+
+
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -118,3 +141,8 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['full_name']
+
+class RoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Role
+        fields = ['id', 'name']  # adapt fields as per your Role model
