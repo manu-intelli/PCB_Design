@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'right_to_draw',  # Custom app (your app)
     'authentication',  # Custom authentication app
     'masters',  # Custom app for managing master data
+    'pibase',  # Custom app for managing PiBase records
 ]
 
 # Middleware configuration
