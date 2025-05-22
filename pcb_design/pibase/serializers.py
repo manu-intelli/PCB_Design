@@ -25,3 +25,4 @@ class PiBaseRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = PiBaseRecord
         fields = '__all__'
+        
