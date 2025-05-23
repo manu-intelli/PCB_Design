@@ -28,7 +28,7 @@ FRONTEND_PORT = os.getenv("FRONTEND_PORT", "5173")
 # Configure allowed hosts based on the environment
 if SERVER_TYPE == 'LOCAL':
     # Only allow localhost for local development
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1',"*"]
 else:
     # For live servers, allow the production URL and frontend IP
     ALLOWED_HOSTS = ['pcb-design-5nqf.onrender.com','localhost', os.getenv('FRONTEND_IP', '*'),os.getenv('BACKEND_IP', '*')]

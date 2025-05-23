@@ -79,10 +79,12 @@ class PiBaseRecord(models.Model):
     opu_no = models.CharField(max_length=20, verbose_name="OPU Number")
     edu_no = models.CharField(max_length=20, verbose_name="EDU Number")
     model_name = models.CharField(max_length=100)
+  
     schematic = models.TextField(blank=True, null=True)
     similar_model_layout = models.TextField(blank=True, null=True)
     revision_number = models.CharField(max_length=20)
 
+    technology = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_technology', verbose_name="Technology")
     model_family = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_model_family', verbose_name="Model Family")
     bottom_solder_mask = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_bottom_solder_mask', verbose_name="Bottom Solder Mask")
     half_moon_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_half_moon_requirement', verbose_name="Half Moon Requirement")
