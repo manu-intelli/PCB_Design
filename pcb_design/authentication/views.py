@@ -2,27 +2,27 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.exceptions import ValidationError, NotFound
 from .custom_permissions import IsAuthorized
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer,RoleSerializer
 from .services import reset_user_password, get_users, update_user, delete_user
 from . import authentication_logs
 
-
 class UserRegistrationView(APIView):
     permission_classes = [IsAuthorized]
+
     def post(self, request):
         authentication_logs.info(f"User Registration Request: {request.data}")
-        role = request.data.get('role', 'CADesigner')
-        authentication_logs.info(f"Role: {role}")
-        serializer = RegisterSerializer(data=request.data, context={'role': role})
+        serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
             authentication_logs.info(f"User Registration Successful: {user}")
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         authentication_logs.error(f"User Registration Failed: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class LoginView(APIView):
@@ -125,3 +125,13 @@ class UserAPIView(APIView):
         except Exception as e:
             authentication_logs.error(f"Exception occurred While Deleting the User: {e} for user id: {pk}")
             return Response({"error": f"Exception occurred While Deleting the User: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RoleListView(APIView):
+    """
+    API endpoint to list all available roles.
+    """
+    def get(self, request):
+        roles = Group.objects.exclude(name="Admin")
+        serializer = RoleSerializer(roles, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

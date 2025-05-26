@@ -27,53 +27,60 @@ class RegisterSerializer(serializers.ModelSerializer):
     )
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True)
-    full_name = serializers.CharField(required=True) 
-  
+    full_name = serializers.CharField(required=True)
+    role = serializers.ListField(
+        child=serializers.CharField(), required=False  # Accept role names
+    )
+
     class Meta:
         model = CustomUser
-        fields = ( 'password', 'password2', 'email', 'full_name')
-  
+        fields = ('email', 'full_name', 'password', 'password2', 'role')
+
     def validate(self, attrs):
-        authentication_logs.info(f"Register User Request {attrs['email']}")
         if attrs['password'] != attrs['password2']:
-            authentication_logs.error(f"Password fields didn't match. {attrs['email']}")
             raise serializers.ValidationError({"password": "Password fields didn't match."})
-
-        if 'role' in attrs:
-            roles = attrs['role'].split(',')
-            attrs['role'] = [role.strip() for role in roles]
-            authentication_logs.info(f"Role: {attrs['role']}")
-
         return attrs
 
     def create(self, validated_data):
-        authentication_logs.info(f"Register User Request {validated_data['email']}")
-        user = CustomUser.objects.create(
-            email=validated_data['email']
-        )
-        user.set_password(validated_data['password'])
-        roles = self.context.get('role', 'CADesigner')
-        if isinstance(roles, str):
-            roles = [roles]
-        
-        is_valid_role_added = False 
-        for role in roles:
-            if role in valid_roles:
-                is_valid_role_added = True                
-                
-                group, created = Group.objects.get_or_create(name=role)
+        roles = validated_data.pop('role', ['CADesigner'])
+        password = validated_data.pop('password')
+        validated_data.pop('password2')
+
+        cleaned_roles = [r.strip() for r in roles if r.strip()]
+        if len(cleaned_roles) > 1 and 'NormalUser' in cleaned_roles:
+            cleaned_roles.remove('NormalUser')
+
+        group_ids = []
+        user = CustomUser.objects.create(**validated_data)
+        user.set_password(password)
+
+        for role in cleaned_roles:
+            try:
+                group = Group.objects.get(name=role)
                 user.groups.add(group)
-        
-        user.role = ", ".join(roles)
-        user.full_name = validated_data['full_name']
-        if not is_valid_role_added:
-            role = 'CADesigner'
-            group, created = Group.objects.get_or_create(name=role)
-            user.groups.add(group)           
-        
+                group_ids.append(str(group.id))  # collect the group ID
+            except Group.DoesNotExist:
+                continue  # skip invalid roles
+
+        # Fallback if no valid roles
+        if not group_ids:
+            group, _ = Group.objects.get_or_create(name='NormalUser')
+            user.groups.add(group)
+            group_ids.append(str(group.id))
+
+        # Save group IDs as comma-separated string in the `role` CharField
+        user.role = ",".join(group_ids)
         user.save()
-        authentication_logs.info(f"User Registered Successfully: {user.email}")
+
         return user
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Send role names in response
+        rep['role'] = [group.name for group in instance.groups.all()]
+        return rep
+
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -118,3 +125,9 @@ class UpdateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['full_name']
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ['id', 'name']  # adapt fields as per your Role model

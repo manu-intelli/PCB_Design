@@ -41,6 +41,7 @@ urlpatterns = [
     path('auth/', include('authentication.urls')),
     path('right-draw/', include('right_to_draw.urls')),
     path('masters/', include('masters.urls')),
+    path('pibase/', include('pibase.urls')),
     path('admin/', admin.site.urls),
 ]
 
