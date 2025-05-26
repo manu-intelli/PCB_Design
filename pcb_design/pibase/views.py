@@ -1,14 +1,19 @@
 from rest_framework import generics, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from django.http import Http404
 from .models import PiBaseComponent, PiBaseFieldCategory, PiBaseRecord, PiBaseFieldOption
 from .serializers import (
     PiBaseComponentSerializer,
     PiBaseFieldCategorySerializer,
     PiBaseRecordSerializer,
     PiBaseFieldOptionSerializer,
-    PiBaseRecordStepOneSerializer
+    PiBaseRecordStepOneSerializer,
+    PiBaseRecordStepTwoSerializer,
 )
+import uuid
 
 class PiBaseComponentListView(generics.ListAPIView):
     queryset = PiBaseComponent.objects.all()
@@ -34,10 +39,10 @@ class PiBaseRecordListView(generics.ListAPIView):
 class PiBaseRecordStepOneCreateView(generics.CreateAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordStepOneSerializer
-    # permission_classes = [permissions.IsAuthenticated]  # Optional, use if auth is required
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        # Set created_by if needed (optional)
         serializer.save(created_by=self.request.user)
 
 
@@ -58,3 +63,17 @@ class GroupedFieldOptionsView(APIView):
             data[key] = options_list
 
         return Response(data)
+
+
+class PiBaseRecordStepTwoUpdateView(generics.UpdateAPIView):
+    queryset = PiBaseRecord.objects.all()
+    serializer_class = PiBaseRecordStepTwoSerializer
+    lookup_field = 'id'  # The actual primary key
+
+    def get_object(self):
+        record_uuid = self.kwargs['record_id']
+        for obj in self.get_queryset():
+            generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}')
+            if str(generated_uuid) == str(record_uuid):
+                return obj
+        raise Http404("Record not found")

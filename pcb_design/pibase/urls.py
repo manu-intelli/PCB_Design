@@ -5,7 +5,8 @@ from .views import (
     PiBaseRecordListView,
     PiBaseFieldOptionListView,
     PiBaseRecordStepOneCreateView,
-    GroupedFieldOptionsView
+    GroupedFieldOptionsView,
+    PiBaseRecordStepTwoUpdateView,
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('field-options/grouped/', GroupedFieldOptionsView.as_view(), name='grouped-field-options'),
     path('records/', PiBaseRecordListView.as_view(), name='records-list'),
     path('pi-base-record/step-one/', PiBaseRecordStepOneCreateView.as_view(), name='pi-base-record-step-one'),
+    path('pi-base-records/<uuid:record_id>/', PiBaseRecordStepTwoUpdateView.as_view(), name='update-record'),
 ]

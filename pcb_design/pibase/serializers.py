@@ -82,3 +82,22 @@ class PiBaseRecordStepOneSerializer(serializers.ModelSerializer):
         validated_data['updated_by'] = user
 
         return super().create(validated_data)
+    
+
+class PiBaseRecordStepTwoSerializer(serializers.ModelSerializer):
+    recordId = serializers.SerializerMethodField()
+    currentStep = serializers.IntegerField(source='current_step', required=False)
+    modelName = serializers.CharField(source='model_name', required=False)
+
+    class Meta:
+        model = PiBaseRecord
+        fields = '__all__'
+
+    def get_recordId(self, obj):
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
+
+    def to_internal_value(self, data):
+        # Remove read-only or unknown fields like recordId
+        data = data.copy()
+        data.pop('recordId', None)
+        return super().to_internal_value(data)
