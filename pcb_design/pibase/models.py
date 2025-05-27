@@ -43,6 +43,8 @@ class PiBaseFieldOption(models.Model):
 class PiBaseComponent(models.Model):
     name = models.CharField(max_length=100, unique=True)
     format = models.JSONField(default=dict, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    icon = models.CharField(max_length=100, blank=True, null=True, help_text="Icon class for the component, e.g., 'CircuitBoard'")
     status = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
