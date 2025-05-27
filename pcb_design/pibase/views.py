@@ -1,8 +1,8 @@
 from rest_framework import generics, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from authentication.custom_permissions import IsAuthorized
+from authentication.custom_authentication import CustomJWTAuthentication
 from django.http import Http404
 from .models import PiBaseComponent, PiBaseFieldCategory, PiBaseRecord, PiBaseFieldOption
 from .serializers import (
@@ -39,8 +39,8 @@ class PiBaseRecordListView(generics.ListAPIView):
 class PiBaseRecordStepOneCreateView(generics.CreateAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordStepOneSerializer
-    authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthorized]
+    authentication_classes = [CustomJWTAuthentication]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
