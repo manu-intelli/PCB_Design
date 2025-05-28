@@ -89,42 +89,60 @@ class PiBaseRecordStepOneSerializer(serializers.ModelSerializer):
 
 
 class PiBaseRecordGetSerializer(serializers.ModelSerializer):
-    # ForeignKey fields to their .name
-    technology = serializers.CharField(source='technology.name', default=None)
-    model_family = serializers.CharField(source='model_family.name', default=None)
-    bottom_solder_mask = serializers.CharField(source='bottom_solder_mask.name', default=None)
-    half_moon_requirement = serializers.CharField(source='half_moon_requirement.name', default=None)
-    via_holes_on_signal_pads = serializers.CharField(source='via_holes_on_signal_pads.name', default=None)
-    signal_launch_type = serializers.CharField(source='signal_launch_type.name', default=None)
-    cover_type = serializers.CharField(source='cover_type.name', default=None)
-    design_rule_violation_accepted = serializers.CharField(source='design_rule_violation_accepted.name', default=None)
-
-    # ManyToMany components as list of component names
-    components = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
+    # These SerializerMethodFields are correctly defined to use methods for retrieval
+    technology = serializers.SerializerMethodField()
+    model_family = serializers.SerializerMethodField()
+    bottomSolderMask = serializers.SerializerMethodField()
+    halfMoonRequirement = serializers.SerializerMethodField()
+    viaHolesRequirement = serializers.SerializerMethodField()
+    signalLaunchType = serializers.SerializerMethodField()
+    coverType = serializers.SerializerMethodField()
+    designRuleViolation = serializers.SerializerMethodField()
+    components = serializers.SerializerMethodField() # Use read_only=True for GET operations
 
     class Meta:
         model = PiBaseRecord
         fields = [
-            'op_no', 'opu_no', 'edu_no', 'model_name', 'schematic', 'similar_model_layout', 'revision_number',
-            'technology', 'model_family', 'bottom_solder_mask', 'half_moon_requirement', 'via_holes_on_signal_pads',
-            'signal_launch_type', 'cover_type', 'design_rule_violation_accepted',
-            'impedance_selection', 'package_details', 'case_style_data',
-            'components',
-            'can_details', 'pcb_details', 'aircoil_details', 'inductor_details', 'capacitor_details', 'resistor_details',
-            'transformer_details', 'shield_details', 'finger_details', 'copper_flaps_details', 'resonator_details', 'ltcc_details',
-            'status', 'created_by', 'updated_by', 'current_step',
-            'created_at', 'updated_at',
+            'op_no', 'opu_no', 'edu_no', 'model_name', 'model_family', 'technology',
+            'revision_number', 'schematic', 'similar_model_layout',
+            'impedance_selection', 'bottomSolderMask', 'halfMoonRequirement',
+            'viaHolesRequirement', 'signalLaunchType', 'coverType', 'designRuleViolation',
+            'current_step', 'package_details', 'components',
+            'capacitor_details', 'inductor_details', 'aircoil_details',
+            'resistor_details', 'transformer_details', 'can_details',
+            'pcb_details', 'shield_details', 'finger_details',
+            'copper_flaps_details', 'resonator_details', 'ltcc_details'
         ]
 
-    # Override to_representation to convert snake_case to camelCase in output keys
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        
-        def snake_to_camel(snake_str):
-            parts = snake_str.split('_')
-            return parts[0] + ''.join(word.capitalize() for word in parts[1:])
-        
-        return {snake_to_camel(k): v for k, v in data.items()}
+    # Corrected methods to access .value instead of .name
+    def get_technology(self, obj):
+        return obj.technology.id if obj.technology else None
+
+    def get_model_family(self, obj):
+        return obj.model_family.id if obj.model_family else None
+
+    def get_bottomSolderMask(self, obj):
+        return obj.bottom_solder_mask.id if obj.bottom_solder_mask else None
+
+    def get_halfMoonRequirement(self, obj):
+        return obj.half_moon_requirement.id if obj.half_moon_requirement else None
+
+    def get_viaHolesRequirement(self, obj):
+        return obj.via_holes_on_signal_pads.id if obj.via_holes_on_signal_pads else None
+
+    def get_signalLaunchType(self, obj):
+        return obj.signal_launch_type.id if obj.signal_launch_type else None
+
+    def get_coverType(self, obj):
+        return obj.cover_type.id if obj.cover_type else None
+
+    def get_designRuleViolation(self, obj):
+        return obj.design_rule_violation_accepted.id if obj.design_rule_violation_accepted else None
+    
+    def get_components(self, obj):
+        # obj.components is a ManyToManyManager. .all() retrieves the related objects.
+        # Then, a list comprehension extracts the 'id' of each component.
+        return [component.id for component in obj.components.all()]
 
 class BasicInfoSerializer(serializers.ModelSerializer):
     opNumber = serializers.CharField(source='op_no')
@@ -132,7 +150,7 @@ class BasicInfoSerializer(serializers.ModelSerializer):
     eduNumber = serializers.CharField(source='edu_no')
     modelName = serializers.CharField(source='model_name')
     currentStep = serializers.IntegerField(source='current_step')
-    technology = serializers.IntegerField(source='technology')
+    technology = serializers.IntegerField()
     modelFamily = serializers.IntegerField(source='model_family')
 
     class Meta:
@@ -184,10 +202,17 @@ class BasicInfoSerializer(serializers.ModelSerializer):
         return instance
 
 
+class BlankToNullIntegerField(serializers.IntegerField):
+    def to_internal_value(self, data):
+        if data == "":
+            return None
+        return super().to_internal_value(data)
+    
+
 class GeneralDetailsSerializer(serializers.ModelSerializer):
     currentStep = serializers.SerializerMethodField()
     impedance = serializers.CharField(write_only=True)
-    customImpedance = serializers.CharField(write_only=True, required=False,allow_null=True, allow_blank=True)
+    customImpedance = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
     interfaces = serializers.CharField(write_only=True)
     caseStyleType = serializers.CharField(write_only=True)
     CaseStyle = serializers.CharField(write_only=True, required=False)
@@ -195,38 +220,43 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
     ports = serializers.JSONField(write_only=True)
     enclosureDetails = serializers.JSONField(write_only=True)
     topcoverDetails = serializers.JSONField(write_only=True)
-    bottomSolderMask = serializers.IntegerField(write_only=True)
-    halfMoonRequirement = serializers.IntegerField(write_only=True)
-    viaHolesRequirement = serializers.IntegerField(write_only=True)
-    signalLaunchType = serializers.IntegerField(write_only=True)
-    coverType = serializers.IntegerField(write_only=True)
-    designRuleViolation = serializers.IntegerField(write_only=True)
+
+    bottomSolderMask = BlankToNullIntegerField(write_only=True, allow_null=True)  # ✅ Now works!
+    halfMoonRequirement = BlankToNullIntegerField(write_only=True, allow_null=True)
+    viaHolesRequirement = BlankToNullIntegerField(write_only=True, allow_null=True)
+    signalLaunchType = BlankToNullIntegerField(write_only=True, allow_null=True)
+    coverType = BlankToNullIntegerField(write_only=True, allow_null=True)
+    designRuleViolation = BlankToNullIntegerField(write_only=True, allow_null=True)
+
 
     similarModel = serializers.CharField(write_only=True, required=False)
-    schematicFile = serializers.CharField(write_only=True, required=False,allow_null=True, allow_blank=True)
+    schematicFile = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = PiBaseRecord
         fields = [
-            'currentStep', 'impedance', 'customImpedance', 'interfaces', 
+            'currentStep', 'impedance', 'customImpedance', 'interfaces',
             'caseStyleType', 'CaseStyle', 'caseDimensions', 'ports',
-            'enclosureDetails', 'topcoverDetails', 'bottomSolderMask',
-            'halfMoonRequirement', 'viaHolesRequirement', 'signalLaunchType',
-            'coverType', 'designRuleViolation', 'similarModel', 'schematicFile'
+            'enclosureDetails', 'topcoverDetails',
+            'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
+            'signalLaunchType', 'coverType', 'designRuleViolation',
+            'similarModel', 'schematicFile'
         ]
 
     def get_currentStep(self, obj):
-        return obj.current_step  # Adjust according to your model field name
+        return obj.current_step
 
     def validate(self, data):
-        # Add validation logic here
+        # Add any custom validation if required
         return data
 
     def update(self, instance, validated_data):
+        # Handle simple JSON assignments
         instance.impedance_selection = {
             'impedance': validated_data.get('impedance'),
             'customImpedance': validated_data.get('customImpedance', '')
         }
+
         instance.package_details = {
             'interfaces': validated_data.get('interfaces'),
             'caseStyleType': validated_data.get('caseStyleType'),
@@ -236,15 +266,35 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
             'enclosureDetails': validated_data.get('enclosureDetails'),
             'topcoverDetails': validated_data.get('topcoverDetails')
         }
-        
-        
+
+        # Foreign key assignments with validation
+        fk_fields = [
+            ('bottom_solder_mask', 'bottomSolderMask'),
+            ('half_moon_requirement', 'halfMoonRequirement'),
+            ('via_holes_on_signal_pads', 'viaHolesRequirement'),
+            ('signal_launch_type', 'signalLaunchType'),
+            ('cover_type', 'coverType'),
+            ('design_rule_violation_accepted', 'designRuleViolation'),
+        ]
+
+        for model_field, input_field in fk_fields:
+            try:
+                setattr(
+                    instance,
+                    model_field,
+                    PiBaseFieldOption.objects.get(id=validated_data[input_field])
+                )
+            except PiBaseFieldOption.DoesNotExist:
+                raise serializers.ValidationError({input_field: "Invalid option ID."})
+
         if 'schematicFile' in validated_data:
             instance.schematic = validated_data['schematicFile']
-        
+        if 'similarModel' in validated_data:
+            instance.similar_model = validated_data['similarModel']
+
         instance.current_step = self.initial_data.get('currentStep', instance.current_step)
         instance.save()
         return instance
-
 
 class ComponentsSelectionSerializer(serializers.ModelSerializer):
     currentStep = serializers.SerializerMethodField()
