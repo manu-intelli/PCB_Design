@@ -259,12 +259,16 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
 
         instance.package_details = {
             'interfaces': validated_data.get('interfaces'),
-            'caseStyleType': validated_data.get('caseStyleType'),
-            'CaseStyle': validated_data.get('CaseStyle', ''),
-            'caseDimensions': validated_data.get('caseDimensions'),
+            
             'ports': validated_data.get('ports'),
             'enclosureDetails': validated_data.get('enclosureDetails'),
             'topcoverDetails': validated_data.get('topcoverDetails')
+        }
+
+        instance.case_style_data = {
+            'caseStyleType': validated_data.get('caseStyleType'),
+            'CaseStyle': validated_data.get('CaseStyle', ''),
+            'caseDimensions': validated_data.get('caseDimensions'),
         }
 
         # Foreign key assignments with validation
@@ -290,7 +294,7 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
         if 'schematicFile' in validated_data:
             instance.schematic = validated_data['schematicFile']
         if 'similarModel' in validated_data:
-            instance.similar_model = validated_data['similarModel']
+            instance.similar_model_layout = validated_data['similarModel']
 
         instance.current_step = self.initial_data.get('currentStep', instance.current_step)
         instance.save()
