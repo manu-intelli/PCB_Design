@@ -149,23 +149,48 @@ class BasicInfoSerializer(serializers.ModelSerializer):
             'technology': {'required': True},
         }
 
+    def validate(self, data):
+        # Get instance if present (in PATCH)
+        instance = self.instance
+        errors = {}
+
+        # Extract values, fallback to instance if not in PATCH payload
+        op_no = data.get('op_no', getattr(instance, 'op_no', None))
+        opu_no = data.get('opu_no', getattr(instance, 'opu_no', None))
+        edu_no = data.get('edu_no', getattr(instance, 'edu_no', None))
+        model_name = data.get('model_name', getattr(instance, 'model_name', None))
+
+        if PiBaseRecord.objects.filter(op_no=op_no).exclude(id=instance.id).exists():
+            errors['opNumber'] = 'OP Number already exists.'
+        if PiBaseRecord.objects.filter(opu_no=opu_no).exclude(id=instance.id).exists():
+            errors['opuNumber'] = 'OPU Number already exists.'
+        if PiBaseRecord.objects.filter(edu_no=edu_no).exclude(id=instance.id).exists():
+            errors['eduNumber'] = 'EDU Number already exists.'
+        if PiBaseRecord.objects.filter(model_name=model_name).exclude(id=instance.id).exists():
+            errors['modelName'] = 'Model Name already exists.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return data
+
     def update(self, instance, validated_data):
         # Handle the current_step separately
         current_step = validated_data.pop('current_step', None)
         if current_step is not None:
             instance.current_step = current_step
-        
-        # Update other fields
+
+        # Update remaining fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
+
         instance.save()
         return instance
+
 
 class GeneralDetailsSerializer(serializers.ModelSerializer):
     currentStep = serializers.SerializerMethodField()
     impedance = serializers.CharField(write_only=True)
-    customImpedance = serializers.CharField(write_only=True, required=False)
+    customImpedance = serializers.CharField(write_only=True, required=False,allow_null=True, allow_blank=True)
     interfaces = serializers.CharField(write_only=True)
     caseStyleType = serializers.CharField(write_only=True)
     CaseStyle = serializers.CharField(write_only=True, required=False)
@@ -180,7 +205,7 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
     coverType = serializers.CharField(write_only=True)
     designRuleViolation = serializers.CharField(write_only=True)
     similarModel = serializers.CharField(write_only=True, required=False)
-    schematicFile = serializers.CharField(write_only=True, required=False)
+    schematicFile = serializers.CharField(write_only=True, required=False,allow_null=True, allow_blank=True)
 
     class Meta:
         model = PiBaseRecord
