@@ -41,10 +41,17 @@ class PiBaseFieldOptionListView(generics.ListAPIView):
     serializer_class = PiBaseFieldOptionSerializer
     pagination_class = None
 
+from rest_framework.pagination import PageNumberPagination
+
+class PiBaseRecordPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'  # optional, allow client to set page size in query param
+    max_page_size = 100
 
 class PiBaseRecordListView(generics.ListAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordSerializer
+    pagination_class = PiBaseRecordPagination  # explicitly add pagination here
 
 
 class PiBaseRecordStepOneCreateView(generics.CreateAPIView):

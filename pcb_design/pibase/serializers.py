@@ -27,10 +27,14 @@ class PiBaseFieldOptionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class PiBaseRecordSerializer(serializers.ModelSerializer):
+    recordId = serializers.SerializerMethodField()  # add this field here
     class Meta:
         model = PiBaseRecord
         fields = '__all__'
 
+    def get_recordId(self, obj):
+        # Generate a UUID based on the record's primary key (id)
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
 
 class PiBaseRecordStepOneSerializer(serializers.ModelSerializer):
     recordId = serializers.SerializerMethodField()  # Add this field to serializer output
