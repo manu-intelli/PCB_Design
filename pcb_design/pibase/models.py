@@ -115,6 +115,8 @@ class PiBaseRecord(models.Model):
     resonator_details = models.JSONField(default=dict, blank=True, null=True)
     ltcc_details = models.JSONField(default=dict, blank=True, null=True)
 
+    special_requirements = models.TextField(blank=True, null=True, verbose_name="Special Requirements")
+
     status = models.ForeignKey(PiBaseStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="device_models")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records')
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records_updated')
