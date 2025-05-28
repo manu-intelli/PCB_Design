@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions,status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from authentication.custom_permissions import IsAuthorized
@@ -11,7 +11,15 @@ from .serializers import (
     PiBaseRecordSerializer,
     PiBaseFieldOptionSerializer,
     PiBaseRecordStepOneSerializer,
-    PiBaseRecordStepTwoSerializer,
+    BasicInfoSerializer,
+    GeneralDetailsSerializer,
+    ComponentsSelectionSerializer,
+    PcbCanSerializer,
+    CapacitorsSerializer,
+    InductorsAircoilsTransformersSerializer,
+    ResonatorSerializer,
+    FinalComponentsSerializer,
+    PiBaseRecordGetSerializer
 )
 import uuid
 
@@ -65,15 +73,187 @@ class GroupedFieldOptionsView(APIView):
         return Response(data)
 
 
-class PiBaseRecordStepTwoUpdateView(generics.UpdateAPIView):
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+
+class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
     queryset = PiBaseRecord.objects.all()
-    serializer_class = PiBaseRecordStepTwoSerializer
-    lookup_field = 'id'  # The actual primary key
+    lookup_field = 'id'
+
+    def get_serializer_class(self):
+        """
+        Dynamically choose the serializer based on currentStep from request.
+        Fallback to BasicInfoSerializer if not found or for schema generation.
+        """
+        step = self.request.data.get('currentStep', 1) if self.request.method != 'GET' else 1
+        serializer_map = {
+            1: BasicInfoSerializer,
+            2: GeneralDetailsSerializer,
+            3: ComponentsSelectionSerializer,
+            4: PcbCanSerializer,
+            5: CapacitorsSerializer,
+            6: InductorsAircoilsTransformersSerializer,
+            7: ResonatorSerializer,
+            8: FinalComponentsSerializer,
+        }
+        return serializer_map.get(int(step), BasicInfoSerializer)
 
     def get_object(self):
-        record_uuid = self.kwargs['record_id']
+        """
+        Match UUID generated from model id.
+        """
+        record_uuid = self.kwargs.get('record_id')
         for obj in self.get_queryset():
             generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}')
             if str(generated_uuid) == str(record_uuid):
                 return obj
         raise Http404("Record not found")
+
+    @swagger_auto_schema(
+    operation_description="Partially update a PiBase record using a UUID and dynamic form step (1 to 8).",
+    manual_parameters=[
+        openapi.Parameter(
+            'record_id',
+            openapi.IN_PATH,
+            description="UUID generated from model ID using uuid5 with NAMESPACE_DNS",
+            type=openapi.TYPE_STRING,
+            required=True
+        )
+    ],
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=["currentStep"],
+        properties={
+            'currentStep': openapi.Schema(type=openapi.TYPE_INTEGER, description="Step number (1 to 8)"),
+
+            # --- Sample Fields for Each Step ---
+            'name': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 1) Basic Info - name"),
+            'age': openapi.Schema(type=openapi.TYPE_INTEGER, description="(Step 1) Basic Info - age"),
+
+            'location': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 2) General Details - location"),
+
+            'component_ids': openapi.Schema(type=openapi.TYPE_ARRAY,
+                                            items=openapi.Items(type=openapi.TYPE_INTEGER),
+                                            description="(Step 3) Components Selection - List of component IDs"),
+
+            'pcb_type': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 4) PCB Type"),
+
+            'capacitor_value': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 5) Capacitor Value"),
+
+            'inductor_type': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 6) Inductor Type"),
+
+            'resonator_frequency': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 7) Resonator Frequency"),
+
+            'final_review_notes': openapi.Schema(type=openapi.TYPE_STRING, description="(Step 8) Final Notes"),
+        }
+    ),
+    responses={200: "Record updated successfully", 400: "Validation error"}
+)
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', True)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # def get(self, request, *args, **kwargs):
+    #     """
+    #     Fetch the entire PiBase record based on the UUID.
+    #     Ignores currentStep and returns all data using a full serializer.
+    #     """
+    #     instance = self.get_object()
+    #     # import inside if needed
+    #     serializer = PiBaseRecordGetSerializer(instance)
+    #     return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def get(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = PiBaseRecordGetSerializer(instance)
+        data = serializer.data
+
+        transformed = {
+            "opNumber": data.get("opNo"),
+            "opuNumber": data.get("opuNo"),
+            "eduNumber": data.get("eduNo"),
+            "modelName": data.get("modelName"),
+            "modelFamily": data.get("modelFamily"),
+            "technology": data.get("technology"),
+            "revisionNumber": data.get("revisionNumber"),
+            "schematicFile": data.get("schematic"),
+            "similarModel": data.get("similarModelLayout"),
+            "impedance": data.get("impedanceSelection", {}).get("impedance"),
+            "customImpedance": data.get("impedanceSelection", {}).get("customImpedance"),
+            "bottomSolderMask": data.get("bottomSolderMask"),
+            "halfMoonRequirement": data.get("halfMoonRequirement"),
+            "viaHolesRequirement": data.get("viaHolesOnSignalPads"),
+            "signalLaunchType": data.get("signalLaunchType"),
+            "coverType": data.get("coverType"),
+            "designRuleViolation": data.get("designRuleViolationAccepted"),
+            "currentStep": data.get("currentStep"),
+            "caseStyleType": data.get("packageDetails", {}).get("caseStyleType"),
+            "caseStyle": data.get("packageDetails", {}).get("CaseStyle"),
+            "interfaces": data.get("packageDetails", {}).get("interfaces"),
+            "caseDimensions": data.get("packageDetails", {}).get("caseDimensions"),
+            "ports": data.get("packageDetails", {}).get("ports"),
+            "enclosureDetails": data.get("packageDetails", {}).get("enclosureDetails"),
+            "topcoverDetails": data.get("packageDetails", {}).get("topcoverDetails"),
+            "can": data.get("canDetails"),
+            "selectedComponents": data.get("components", []),
+
+            # Default placeholder for component lists
+            "capacitors": {
+                "withBPart": [],
+                "withoutBPart": [],
+                "withBPartCount": 0,
+                "withoutBPartCount": 0,
+            },
+            "inductors": {
+                "withBPart": [],
+                "withoutBPart": [],
+                "withBPartCount": 0,
+                "withoutBPartCount": 0,
+            },
+            "airCoils": {
+                "withBPart": [],
+                "withoutBPart": [],
+                "withBPartCount": 0,
+                "withoutBPartCount": 0,
+            },
+            "resistors": {
+                "withBPart": [],
+                "withoutBPart": [],
+                "withBPartCount": 0,
+                "withoutBPartCount": 0,
+            },
+            "transformers": {
+                "transformersList": [],
+                "numberOfTransformers": "",
+            },
+            "pcbList": data.get("pcbDetails") or [],
+            "shieldList": {
+                "isShieldRequired": True,
+                "shieldCount": 0,
+                "shields": [],
+            },
+            "fingerList": {
+                "isFingerRequired": "No",
+                "fingerCount": 0,
+                "fingers": [],
+            },
+            "copperFlapList": {
+                "flapCount": 0,
+                "flaps": [],
+            },
+            "resonatorList": {
+                "resonatorCount": 0,
+                "resonators": [],
+            },
+            "ltccList": {
+                "ltccCount": 0,
+                "ltccItems": [],
+            },
+        }
+
+        return Response(transformed, status=status.HTTP_200_OK)
