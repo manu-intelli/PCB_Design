@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from authentication.custom_permissions import IsAuthorized
 from authentication.custom_authentication import CustomJWTAuthentication
 from django.http import Http404
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 from .models import PiBaseComponent, PiBaseFieldCategory, PiBaseRecord, PiBaseFieldOption
 from .serializers import (
     PiBaseComponentSerializer,
@@ -73,12 +76,13 @@ class GroupedFieldOptionsView(APIView):
         return Response(data)
 
 
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+
 
 
 class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
     queryset = PiBaseRecord.objects.all()
+    permission_classes = [IsAuthorized]
+    authentication_classes = [CustomJWTAuthentication]
     lookup_field = 'id'
 
     def get_serializer_class(self):
