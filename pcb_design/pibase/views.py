@@ -212,59 +212,17 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
             "topcoverDetails": data.get("packageDetails", {}).get("topcoverDetails"),
             "can": data.get("canDetails"),
             "selectedComponents": data.get("components", []),
-
-            # Default placeholder for component lists
-            "capacitors": {
-                "withBPart": [],
-                "withoutBPart": [],
-                "withBPartCount": 0,
-                "withoutBPartCount": 0,
-            },
-            "inductors": {
-                "withBPart": [],
-                "withoutBPart": [],
-                "withBPartCount": 0,
-                "withoutBPartCount": 0,
-            },
-            "airCoils": {
-                "withBPart": [],
-                "withoutBPart": [],
-                "withBPartCount": 0,
-                "withoutBPartCount": 0,
-            },
-            "resistors": {
-                "withBPart": [],
-                "withoutBPart": [],
-                "withBPartCount": 0,
-                "withoutBPartCount": 0,
-            },
-            "transformers": {
-                "transformersList": [],
-                "numberOfTransformers": "",
-            },
-            "pcbList": data.get("pcbDetails") or [],
-            "shieldList": {
-                "isShieldRequired": True,
-                "shieldCount": 0,
-                "shields": [],
-            },
-            "fingerList": {
-                "isFingerRequired": "No",
-                "fingerCount": 0,
-                "fingers": [],
-            },
-            "copperFlapList": {
-                "flapCount": 0,
-                "flaps": [],
-            },
-            "resonatorList": {
-                "resonatorCount": 0,
-                "resonators": [],
-            },
-            "ltccList": {
-                "ltccCount": 0,
-                "ltccItems": [],
-            },
+             "capacitors": data.get("capacitors", {}),
+            "inductors": data.get("inductors", {}),
+            "airCoils": data.get("airCoils", {}),
+            "resistors": data.get("resistors", {}),
+            "transformers": data.get("transformers", {}),
+            "pcbList": data.get("pcbDetails", {}),
+            "shieldList": data.get("shieldList", {}),
+            "fingerList": data.get("fingerList", {}),
+            "copperFlapList": data.get("copperFlapList", {}),
+            "resonatorList": data.get("resonatorList", {}),
+            "ltccList": data.get("ltccList", {}),
         }
 
         return Response(transformed, status=status.HTTP_200_OK)

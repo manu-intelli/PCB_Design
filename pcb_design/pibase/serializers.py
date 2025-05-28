@@ -132,11 +132,8 @@ class BasicInfoSerializer(serializers.ModelSerializer):
     eduNumber = serializers.CharField(source='edu_no')
     modelName = serializers.CharField(source='model_name')
     currentStep = serializers.IntegerField(source='current_step')
-    technology = serializers.PrimaryKeyRelatedField(queryset=PiBaseFieldOption.objects.all())
-    modelFamily = serializers.PrimaryKeyRelatedField(
-        queryset=PiBaseFieldOption.objects.all(), 
-        source='model_family'
-    )
+    technology = serializers.IntegerField(source='technology')
+    modelFamily = serializers.IntegerField(source='model_family')
 
     class Meta:
         model = PiBaseRecord
@@ -198,12 +195,13 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
     ports = serializers.JSONField(write_only=True)
     enclosureDetails = serializers.JSONField(write_only=True)
     topcoverDetails = serializers.JSONField(write_only=True)
-    bottomSolderMask = serializers.CharField(write_only=True)
-    halfMoonRequirement = serializers.CharField(write_only=True)
-    viaHolesRequirement = serializers.CharField(write_only=True)
-    signalLaunchType = serializers.CharField(write_only=True)
-    coverType = serializers.CharField(write_only=True)
-    designRuleViolation = serializers.CharField(write_only=True)
+    bottomSolderMask = serializers.IntegerField(write_only=True)
+    halfMoonRequirement = serializers.IntegerField(write_only=True)
+    viaHolesRequirement = serializers.IntegerField(write_only=True)
+    signalLaunchType = serializers.IntegerField(write_only=True)
+    coverType = serializers.IntegerField(write_only=True)
+    designRuleViolation = serializers.IntegerField(write_only=True)
+
     similarModel = serializers.CharField(write_only=True, required=False)
     schematicFile = serializers.CharField(write_only=True, required=False,allow_null=True, allow_blank=True)
 
