@@ -107,7 +107,7 @@ class PiBaseRecordGetSerializer(serializers.ModelSerializer):
             'revision_number', 'schematic', 'similar_model_layout',
             'impedance_selection', 'bottomSolderMask', 'halfMoonRequirement',
             'viaHolesRequirement', 'signalLaunchType', 'coverType', 'designRuleViolation',
-            'current_step', 'package_details', 'components',
+            'current_step', 'package_details', 'case_style_data','components',
             'capacitor_details', 'inductor_details', 'aircoil_details',
             'resistor_details', 'transformer_details', 'can_details',
             'pcb_details', 'shield_details', 'finger_details',
