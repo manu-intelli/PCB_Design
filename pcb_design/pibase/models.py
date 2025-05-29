@@ -82,7 +82,7 @@ class PiBaseRecord(models.Model):
     edu_no = models.CharField(max_length=20, verbose_name="EDU Number")
     model_name = models.CharField(max_length=100)
   
-    schematic = models.TextField(blank=True, null=True)
+    schematic = models.FileField(upload_to='schematics/', blank=True, null=True)
     similar_model_layout = models.TextField(blank=True, null=True)
     revision_number = models.CharField(max_length=20)
 
@@ -90,10 +90,10 @@ class PiBaseRecord(models.Model):
     model_family = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_model_family', verbose_name="Model Family")
     bottom_solder_mask = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_bottom_solder_mask', verbose_name="Bottom Solder Mask")
     half_moon_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_half_moon_requirement', verbose_name="Half Moon Requirement")
-    via_holes_on_signal_pads = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_via_holes_on_signal_pads', verbose_name="Via Holes On Signal Pads")
+    via_holes_on_signal_pads = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_via_holes_on_signal_pads', verbose_name="Via Holes Requirement")
     signal_launch_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_signal_launch_type', verbose_name="Signal Launch Type")
     cover_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_cover_type', verbose_name="Cover Type")
-    design_rule_violation_accepted = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_design_rule_violation_accepted', verbose_name="Design Rule Violation Accepted")
+    design_rule_violation_accepted = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_design_rule_violation_accepted', verbose_name="Design Rule Violation")
 
     impedance_selection = models.JSONField(default=dict, verbose_name="Impedance Selection")
     package_details = models.JSONField(default=dict, blank=True, null=True, verbose_name="Package Details")

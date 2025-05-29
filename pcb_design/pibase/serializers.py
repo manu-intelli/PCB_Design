@@ -230,7 +230,7 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
 
 
     similarModel = serializers.CharField(write_only=True, required=False)
-    schematicFile = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
+    schematicFile = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = PiBaseRecord

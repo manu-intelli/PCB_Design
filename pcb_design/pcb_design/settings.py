@@ -147,6 +147,10 @@ USE_TZ = True  # Enable timezone support
 STATIC_URL = '/static/'  # URL path for static files
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Directory to store static files
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
 # Default auto field type for primary keys
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
