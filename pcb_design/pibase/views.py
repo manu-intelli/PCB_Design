@@ -223,6 +223,7 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
             "copperFlapList": data.get("copper_flaps_details", {}),
             "resonatorList": data.get("resonator_details", {}),
             "ltccList": data.get("ltcc_details", {}),
+            "specialRequirements": data.get("special_requirements"),
         }
 
         return Response(transformed, status=status.HTTP_200_OK)

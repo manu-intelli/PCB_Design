@@ -111,7 +111,7 @@ class PiBaseRecordGetSerializer(serializers.ModelSerializer):
             'capacitor_details', 'inductor_details', 'aircoil_details',
             'resistor_details', 'transformer_details', 'can_details',
             'pcb_details', 'shield_details', 'finger_details',
-            'copper_flaps_details', 'resonator_details', 'ltcc_details'
+            'copper_flaps_details', 'resonator_details', 'ltcc_details','special_requirements',
         ]
 
     # Corrected methods to access .value instead of .name
