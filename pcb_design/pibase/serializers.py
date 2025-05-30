@@ -282,14 +282,19 @@ class GeneralDetailsSerializer(serializers.ModelSerializer):
         ]
 
         for model_field, input_field in fk_fields:
-            try:
-                setattr(
-                    instance,
-                    model_field,
-                    PiBaseFieldOption.objects.get(id=validated_data[input_field])
-                )
-            except PiBaseFieldOption.DoesNotExist:
-                raise serializers.ValidationError({input_field: "Invalid option ID."})
+            field_value = validated_data.get(input_field, None)
+            if field_value is not None:
+                try:
+                    setattr(
+                        instance,
+                        model_field,
+                        PiBaseFieldOption.objects.get(id=field_value)
+                    )
+                except PiBaseFieldOption.DoesNotExist:
+                    raise serializers.ValidationError({input_field: "Invalid option ID."})
+            else:
+                setattr(instance, model_field, None)  # Allow null if not provided
+
 
         if 'schematicFile' in validated_data:
             instance.schematic = validated_data['schematicFile']
@@ -435,3 +440,28 @@ class FinalComponentsSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
     
+class PreviewSerializer(serializers.ModelSerializer):
+    currentStep = serializers.SerializerMethodField()
+    status = BlankToNullIntegerField(write_only=True, allow_null=True)
+
+    class Meta:
+        model = PiBaseRecord
+        fields = ['currentStep', 'status']
+
+    def get_currentStep(self, obj):
+        return obj.current_step
+
+    def update(self, instance, validated_data):
+        # Update status if provided
+        if 'status' in validated_data:
+            try:
+                instance.status = PiBaseStatus.objects.get(id=validated_data['status'])
+            except PiBaseStatus.DoesNotExist:
+                raise serializers.ValidationError({'status': 'Invalid option ID.'})
+
+        # Set current step
+        instance.current_step = self.initial_data.get('currentStep', instance.current_step)
+
+        instance.save()
+        return instance
+

@@ -107,6 +107,7 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
             6: InductorsAircoilsTransformersSerializer,
             7: ResonatorSerializer,
             8: FinalComponentsSerializer,
+            9: PreviewSerializer,  # Assuming you have a PreviewSerializer for step 9
         }
         return serializer_map.get(int(step), BasicInfoSerializer)
 
