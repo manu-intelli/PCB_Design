@@ -22,6 +22,7 @@ from .serializers import (
     InductorsAircoilsTransformersSerializer,
     ResonatorSerializer,
     FinalComponentsSerializer,
+    PreviewSerializer,
     PiBaseRecordGetSerializer
 )
 import uuid
