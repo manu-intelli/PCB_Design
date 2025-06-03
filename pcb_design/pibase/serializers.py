@@ -36,6 +36,13 @@ class PiBaseRecordSerializer(serializers.ModelSerializer):
         # Generate a UUID based on the record's primary key (id)
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
 
+
+class PiBaseRecordUniquenessSerializer(serializers.Serializer):
+    opNumber = serializers.CharField(source='op_no')
+    opuNumber = serializers.CharField(source='opu_no')
+    eduNumber = serializers.CharField(source='edu_no')
+    modelName = serializers.CharField(source='model_name')
+
 class PiBaseRecordStepOneSerializer(serializers.ModelSerializer):
     recordId = serializers.SerializerMethodField()  # Add this field to serializer output
 
@@ -465,3 +472,187 @@ class PreviewSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
+class PiBaseRecordFullSerializer(serializers.ModelSerializer):
+    # Aliases for field names
+    opNumber = serializers.CharField(source='op_no')
+    opuNumber = serializers.CharField(source='opu_no')
+    eduNumber = serializers.CharField(source='edu_no')
+    modelName = serializers.CharField(source='model_name')
+    modelFamily = serializers.IntegerField(source='model_family')
+    technology = serializers.IntegerField()
+
+    # General details
+    impedance = serializers.CharField(write_only=True)
+    customImpedance = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
+    interfaces = serializers.CharField(write_only=True)
+    caseStyleType = serializers.CharField(write_only=True)
+    CaseStyle = serializers.CharField(write_only=True, required=False)
+    caseDimensions = serializers.JSONField(write_only=True)
+    ports = serializers.JSONField(write_only=True)
+    enclosureDetails = serializers.JSONField(write_only=True)
+    topcoverDetails = serializers.JSONField(write_only=True)
+
+    bottomSolderMask = BlankToNullIntegerField(write_only=True, allow_null=True)
+    halfMoonRequirement = BlankToNullIntegerField(write_only=True, allow_null=True)
+    viaHolesRequirement = BlankToNullIntegerField(write_only=True, allow_null=True)
+    signalLaunchType = BlankToNullIntegerField(write_only=True, allow_null=True)
+    coverType = BlankToNullIntegerField(write_only=True, allow_null=True)
+    designRuleViolation = BlankToNullIntegerField(write_only=True, allow_null=True)
+
+    similarModel = serializers.CharField(write_only=True, required=False)
+    schematicFile = serializers.FileField(required=False, allow_null=True)
+
+    # Component Selection
+    selectedComponents = serializers.ListField(child=serializers.IntegerField(), write_only=True, required=False)
+
+    # PCB, Capacitor, Inductor, etc.
+    can = serializers.JSONField(write_only=True, required=False)
+    pcbList = serializers.JSONField(write_only=True, required=False)
+    capacitors = serializers.JSONField(write_only=True, required=False)
+    inductors = serializers.JSONField(write_only=True, required=False)
+    airCoils = serializers.JSONField(write_only=True, required=False)
+    transformers = serializers.JSONField(write_only=True, required=False)
+    resonatorList = serializers.JSONField(write_only=True, required=False)
+    copperFlapList = serializers.JSONField(write_only=True, required=False)
+    ltccList = serializers.JSONField(write_only=True, required=False)
+    resistors = serializers.JSONField(write_only=True, required=False)
+    shieldList = serializers.JSONField(write_only=True, required=False)
+    fingerList = serializers.JSONField(write_only=True, required=False)
+    specialRequirements = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = PiBaseRecord
+        fields = [
+            # Basic Info
+            'opNumber', 'opuNumber', 'eduNumber', 'modelFamily', 'modelName',
+            'technology', 
+
+            # General Details
+            'impedance', 'customImpedance', 'interfaces', 'caseStyleType', 'CaseStyle',
+            'caseDimensions', 'ports', 'enclosureDetails', 'topcoverDetails',
+            'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
+            'signalLaunchType', 'coverType', 'designRuleViolation',
+            'similarModel', 'schematicFile',
+
+            # Component Selection
+            'selectedComponents',
+
+            # PCB and others
+            'can', 'pcbList', 'capacitors',
+            'inductors', 'airCoils', 'transformers', 'resonatorList',
+            'copperFlapList', 'ltccList', 'resistors',
+            'shieldList', 'fingerList', 'specialRequirements'
+        ]
+
+    def validate(self, data):
+        instance = self.instance
+        errors = {}
+
+        op_no = data.get('op_no', getattr(instance, 'op_no', None))
+        opu_no = data.get('opu_no', getattr(instance, 'opu_no', None))
+        edu_no = data.get('edu_no', getattr(instance, 'edu_no', None))
+        model_name = data.get('model_name', getattr(instance, 'model_name', None))
+
+        if PiBaseRecord.objects.filter(op_no=op_no).exclude(id=instance.id).exists():
+            errors['opNumber'] = 'OP Number already exists.'
+        if PiBaseRecord.objects.filter(opu_no=opu_no).exclude(id=instance.id).exists():
+            errors['opuNumber'] = 'OPU Number already exists.'
+        if PiBaseRecord.objects.filter(edu_no=edu_no).exclude(id=instance.id).exists():
+            errors['eduNumber'] = 'EDU Number already exists.'
+        if PiBaseRecord.objects.filter(model_name=model_name).exclude(id=instance.id).exists():
+            errors['modelName'] = 'Model Name already exists.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return data
+
+    def update(self, instance, validated_data):
+        # BasicInfo
+        basic_fields = ['op_no', 'opu_no', 'edu_no', 'model_family', 'model_name', 'technology']
+        for field in basic_fields:
+            if field in validated_data:
+                setattr(instance, field, validated_data[field])
+
+        # current_step update removed here
+
+        # impedance_selection
+        if 'impedance' in validated_data:
+            instance.impedance_selection = {
+                'impedance': validated_data.get('impedance'),
+                'customImpedance': validated_data.get('customImpedance', '')
+            }
+
+        # package_details
+        if 'interfaces' in validated_data:
+            instance.package_details = {
+                'interfaces': validated_data.get('interfaces'),
+                'ports': validated_data.get('ports'),
+                'enclosureDetails': validated_data.get('enclosureDetails'),
+                'topcoverDetails': validated_data.get('topcoverDetails')
+            }
+
+        # case_style_data
+        if 'caseStyleType' in validated_data:
+            instance.case_style_data = {
+                'caseStyleType': validated_data.get('caseStyleType'),
+                'CaseStyle': validated_data.get('CaseStyle', ''),
+                'caseDimensions': validated_data.get('caseDimensions'),
+            }
+
+        # ForeignKey fields
+        fk_map = {
+            'bottom_solder_mask': 'bottomSolderMask',
+            'half_moon_requirement': 'halfMoonRequirement',
+            'via_holes_on_signal_pads': 'viaHolesRequirement',
+            'signal_launch_type': 'signalLaunchType',
+            'cover_type': 'coverType',
+            'design_rule_violation_accepted': 'designRuleViolation',
+        }
+        for model_field, input_field in fk_map.items():
+            field_value = validated_data.get(input_field, None)
+            if field_value is not None:
+                try:
+                    setattr(instance, model_field, PiBaseFieldOption.objects.get(id=field_value))
+                except PiBaseFieldOption.DoesNotExist:
+                    raise serializers.ValidationError({input_field: "Invalid option ID."})
+            else:
+                setattr(instance, model_field, None)
+
+        # Optional files
+        if 'schematicFile' in validated_data:
+            instance.schematic = validated_data['schematicFile']
+        if 'similarModel' in validated_data:
+            instance.similar_model_layout = validated_data['similarModel']
+
+        # selectedComponents
+        if 'selectedComponents' in validated_data:
+            component_ids = validated_data['selectedComponents']
+            components = PiBaseComponent.objects.filter(id__in=component_ids)
+            instance.components.set(components)
+
+        # Other nested JSON fields
+        nested_json_fields = [
+            ('can_details', 'can'),
+            ('pcb_details', 'pcbList'),
+            ('capacitor_details', 'capacitors'),
+            ('inductor_details', 'inductors'),
+            ('aircoil_details', 'airCoils'),
+            ('transformer_details', 'transformers'),
+            ('resonator_details', 'resonatorList'),
+            ('copper_flaps_details', 'copperFlapList'),
+            ('ltcc_details', 'ltccList'),
+            ('resistor_details', 'resistors'),
+            ('shield_details', 'shieldList'),
+            ('finger_details', 'fingerList')
+        ]
+        for model_field, input_field in nested_json_fields:
+            if input_field in validated_data:
+                setattr(instance, model_field, validated_data[input_field])
+
+        # Special Requirements
+        if 'specialRequirements' in validated_data:
+            instance.special_requirements = validated_data['specialRequirements']
+
+        instance.save()
+        return instance

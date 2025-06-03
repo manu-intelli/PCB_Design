@@ -7,6 +7,8 @@ from .views import (
     PiBaseRecordStepOneCreateView,
     GroupedFieldOptionsView,
     PiBaseRecordPartialUpdateView,
+    CheckPiBaseRecordUniqueView,
+    PiBaseRecordDetailAPIView,
 )
 
 urlpatterns = [
@@ -17,4 +19,6 @@ urlpatterns = [
     path('records/', PiBaseRecordListView.as_view(), name='records-list'),
     path('pi-base-record/step-one/', PiBaseRecordStepOneCreateView.as_view(), name='pi-base-record-step-one'),
     path('pi-base-records/<uuid:record_id>/', PiBaseRecordPartialUpdateView.as_view(), name='update-record'),
+    path('pibase/check-unique/', CheckPiBaseRecordUniqueView.as_view(), name='check-pibase-unique'),
+    path('pibase/create/', PiBaseRecordDetailAPIView.as_view(), name='pibase-create'),
 ]

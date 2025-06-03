@@ -23,7 +23,9 @@ from .serializers import (
     ResonatorSerializer,
     FinalComponentsSerializer,
     PreviewSerializer,
-    PiBaseRecordGetSerializer
+    PiBaseRecordGetSerializer,
+    PiBaseRecordUniquenessSerializer,
+    PiBaseRecordFullSerializer
 )
 import uuid
 
@@ -83,7 +85,49 @@ class GroupedFieldOptionsView(APIView):
 
         return Response(data)
 
+class CheckPiBaseRecordUniqueView(APIView):
 
+    @swagger_auto_schema(request_body=PiBaseRecordUniquenessSerializer)
+    def post(self, request, *args, **kwargs):
+        serializer = PiBaseRecordUniquenessSerializer(data=request.data)
+        if serializer.is_valid():
+            op_no = serializer.validated_data.get('op_no')
+            opu_no = serializer.validated_data.get('opu_no')
+            edu_no = serializer.validated_data.get('edu_no')
+            model_name = serializer.validated_data.get('model_name')
+
+            results = {
+                "op_no": {
+                    "unique": not PiBaseRecord.objects.filter(op_no=op_no).exists(),
+                },
+                "opu_no": {
+                    "unique": not PiBaseRecord.objects.filter(opu_no=opu_no).exists(),
+                },
+                "edu_no": {
+                    "unique": not PiBaseRecord.objects.filter(edu_no=edu_no).exists(),
+                },
+                "model_name": {
+                    "unique": not PiBaseRecord.objects.filter(model_name=model_name).exists(),
+                }
+            }
+
+            # Add helpful message per field
+            for field, result in results.items():
+                result["message"] = (
+                    f"{field} is unique." if result["unique"]
+                    else f"{field} already exists."
+                )
+
+            return Response(results, status=status.HTTP_200_OK)
+
+        # If input data itself is invalid
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PiBaseRecordDetailAPIView(generics.CreateAPIView):
+    queryset = PiBaseRecord.objects.all()
+    serializer_class = PiBaseRecordFullSerializer
+    permission_classes = [IsAuthorized]
+    authentication_classes = [CustomJWTAuthentication]
 
 
 
