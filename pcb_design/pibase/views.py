@@ -129,6 +129,8 @@ class PiBaseRecordDetailAPIView(generics.CreateAPIView):
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
 
+    
+
 
 
 class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
