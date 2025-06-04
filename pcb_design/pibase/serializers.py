@@ -4,8 +4,27 @@ from rest_framework import serializers
 from .models import PiBaseComponent,PiBaseFieldCategory,PiBaseRecord,PiBaseFieldOption,PiBaseStatus
 from django.contrib.auth import get_user_model
 
+import json
+
 
 User = get_user_model()
+
+
+class StringifiedJSONField(serializers.JSONField):
+    def to_internal_value(self, data):
+        # If data is a string, try to parse JSON
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError as e:
+                raise serializers.ValidationError(f"Invalid JSON string: {e}")
+        return super().to_internal_value(data)
+    
+def safe_json_load(raw):
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return raw  # or None, depending on what you prefer
 
 
 class PiBaseComponentSerializer(serializers.ModelSerializer):
@@ -480,7 +499,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     modelName = serializers.CharField(source='model_name')
     modelFamily = serializers.IntegerField(write_only=True)
     technology = serializers.IntegerField(write_only=True)
-    status = serializers.IntegerField(write_only=True)  # ✅ FK field (ID)
+    status = serializers.IntegerField(write_only=True,required=False)  # ✅ FK field (ID)
 
     # General details
     impedance = serializers.CharField(write_only=True)
@@ -533,6 +552,8 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'fingerList', 'specialRequirements'
         ]
 
+
+
     def validate(self, data):
         print("Full incoming payload:", self.initial_data)
         instance = self.instance
@@ -581,7 +602,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         # Fetch status instance
         status_id = self.initial_data.get("status")
         try:
-            status_instance = PiBaseStatus.objects.get(pk=status_id)
+            status_instance = PiBaseStatus.objects.get(pk=1)
         except PiBaseStatus.DoesNotExist:
             raise serializers.ValidationError({"status": f"Invalid ID: {status_id}"})
 
@@ -598,29 +619,37 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         )
 
         # ManyToMany components
-        selected_ids = self.initial_data.get('selectedComponents')
+        selected_ids = self.initial_data.getlist('selectedComponents')
         if selected_ids:
-            components = PiBaseComponent.objects.filter(id__in=selected_ids)
+            # Convert string IDs to integers safely
+            try:
+                selected_ids_int = [int(i) for i in selected_ids]
+            except ValueError:
+                raise serializers.ValidationError({'selectedComponents': 'All component IDs must be integers.'})
+
+            components = PiBaseComponent.objects.filter(id__in=selected_ids_int)
             instance.components.set(components)
 
         # JSON & misc fields
         instance.impedance_selection = {
-            "impedance": self.initial_data.get("impedance"),
-            "customImpedance": self.initial_data.get("customImpedance", "")
+            "impedance": safe_json_load(self.initial_data.get("impedance")),
+            "customImpedance": safe_json_load(self.initial_data.get("customImpedance", ""))
         }
 
         instance.package_details = {
             "interfaces": self.initial_data.get("interfaces"),
-            "ports": self.initial_data.get("ports"),
-            "enclosureDetails": self.initial_data.get("enclosureDetails"),
-            "topcoverDetails": self.initial_data.get("topcoverDetails")
+            "ports": safe_json_load(self.initial_data.get("ports")),
+            "enclosureDetails": safe_json_load(self.initial_data.get("enclosureDetails")),
+            "topcoverDetails": safe_json_load(self.initial_data.get("topcoverDetails"))
         }
 
         instance.case_style_data = {
             "caseStyleType": self.initial_data.get("caseStyleType"),
             "CaseStyle": self.initial_data.get("CaseStyle", ""),
-            "caseDimensions": self.initial_data.get("caseDimensions"),
+            "caseDimensions": safe_json_load(self.initial_data.get("caseDimensions")),
         }
+
+
 
         instance.schematic = self.initial_data.get('schematicFile')
         instance.similar_model_layout = self.initial_data.get('similarModel')
@@ -642,8 +671,13 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             ('finger_details', 'fingerList')
         ]
         for model_field, input_field in json_fields:
-            if self.initial_data.get(input_field) is not None:
-                setattr(instance, model_field, self.initial_data.get(input_field))
+            raw_value = self.initial_data.get(input_field)
+            if raw_value is not None:
+                try:
+                    parsed_value = json.loads(raw_value)
+                except (json.JSONDecodeError, TypeError):
+                    raise serializers.ValidationError({input_field: "Invalid JSON format."})
+                setattr(instance, model_field, parsed_value)
 
         instance.save()
         return instance
@@ -686,29 +720,36 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"status": f"Invalid ID: {status_id}"})
 
         # Update ManyToMany components
-        selected_ids = self.initial_data.get('selectedComponents')
-        if selected_ids is not None:
-            components = PiBaseComponent.objects.filter(id__in=selected_ids)
+        selected_ids = self.initial_data.getlist('selectedComponents')
+        if selected_ids:
+            # Convert string IDs to integers safely
+            try:
+                selected_ids_int = [int(i) for i in selected_ids]
+            except ValueError:
+                raise serializers.ValidationError({'selectedComponents': 'All component IDs must be integers.'})
+
+            components = PiBaseComponent.objects.filter(id__in=selected_ids_int)
             instance.components.set(components)
 
         # Update JSON & misc fields
         instance.impedance_selection = {
-            "impedance": self.initial_data.get("impedance"),
-            "customImpedance": self.initial_data.get("customImpedance", "")
+            "impedance": safe_json_load(self.initial_data.get("impedance")),
+            "customImpedance": safe_json_load(self.initial_data.get("customImpedance", ""))
         }
 
         instance.package_details = {
             "interfaces": self.initial_data.get("interfaces"),
-            "ports": self.initial_data.get("ports"),
-            "enclosureDetails": self.initial_data.get("enclosureDetails"),
-            "topcoverDetails": self.initial_data.get("topcoverDetails")
+            "ports": safe_json_load(self.initial_data.get("ports")),
+            "enclosureDetails": safe_json_load(self.initial_data.get("enclosureDetails")),
+            "topcoverDetails": safe_json_load(self.initial_data.get("topcoverDetails"))
         }
 
         instance.case_style_data = {
             "caseStyleType": self.initial_data.get("caseStyleType"),
             "CaseStyle": self.initial_data.get("CaseStyle", ""),
-            "caseDimensions": self.initial_data.get("caseDimensions"),
+            "caseDimensions": safe_json_load(self.initial_data.get("caseDimensions")),
         }
+
 
         instance.schematic = self.initial_data.get('schematicFile')
         instance.similar_model_layout = self.initial_data.get('similarModel')
@@ -730,8 +771,13 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             ('finger_details', 'fingerList')
         ]
         for model_field, input_field in json_fields:
-            if self.initial_data.get(input_field) is not None:
-                setattr(instance, model_field, self.initial_data.get(input_field))
+            raw_value = self.initial_data.get(input_field)
+            if raw_value is not None:
+                try:
+                    parsed_value = json.loads(raw_value)
+                except (json.JSONDecodeError, TypeError):
+                    raise serializers.ValidationError({input_field: "Invalid JSON format."})
+                setattr(instance, model_field, parsed_value)
 
         instance.save()
         return instance

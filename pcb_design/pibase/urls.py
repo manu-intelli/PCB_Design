@@ -9,6 +9,7 @@ from .views import (
     PiBaseRecordPartialUpdateView,
     CheckPiBaseRecordUniqueView,
     PiBaseRecordDetailAPIView,
+    PiBaseRecordDetailAPIViewUpdate
 )
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
     path('pi-base-records/<uuid:record_id>/', PiBaseRecordPartialUpdateView.as_view(), name='update-record'),
     path('pibase/check-unique/', CheckPiBaseRecordUniqueView.as_view(), name='check-pibase-unique'),
     path('pibase/create/', PiBaseRecordDetailAPIView.as_view(), name='pibase-create'),
+    path('pibase/update/<int:id>', PiBaseRecordDetailAPIViewUpdate.as_view(), name='pibase-update'),
 ]

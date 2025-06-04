@@ -130,7 +130,12 @@ class PiBaseRecordDetailAPIView(generics.CreateAPIView):
     authentication_classes = [CustomJWTAuthentication]
 
     
-
+class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
+    queryset = PiBaseRecord.objects.all()
+    serializer_class = PiBaseRecordFullSerializer
+    permission_classes = [IsAuthorized]
+    authentication_classes = [CustomJWTAuthentication]
+    lookup_field = 'id'  # or 'pk' if you’re using default URLs
 
 
 class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
