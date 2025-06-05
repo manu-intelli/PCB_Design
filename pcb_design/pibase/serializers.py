@@ -687,7 +687,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
                 except (json.JSONDecodeError, TypeError):
                     raise serializers.ValidationError({input_field: "Invalid JSON format."})
                 setattr(instance, model_field, parsed_value)
-
+        instance.revision_number = "1"  # Set initial revision number
         instance.save()
         return instance
 
@@ -789,5 +789,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({input_field: "Invalid JSON format."})
                 setattr(instance, model_field, parsed_value)
 
+        # Increment revision number
+        instance.revision_number = str(int(instance.revision_number) + 1)
         instance.save()
         return instance
