@@ -131,11 +131,23 @@ class PiBaseRecordDetailAPIView(generics.CreateAPIView):
 
     
 class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
-    queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordFullSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
-    lookup_field = 'id'  # or 'pk' if you’re using default URLs
+
+    def get_queryset(self):
+        return PiBaseRecord.objects.all()
+
+    def get_object(self):
+        """
+        Match UUID generated from model ID using uuid5(PiBase-{id}).
+        """
+        record_uuid = self.kwargs.get('record_id')
+        for obj in self.get_queryset():
+            generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}')
+            if str(generated_uuid) == str(record_uuid):
+                return obj
+        raise Http404("Record not found")
 
 
 class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):

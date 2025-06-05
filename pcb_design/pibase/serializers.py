@@ -498,7 +498,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     eduNumber = serializers.CharField(source='edu_no')
     modelName = serializers.CharField(source='model_name')
     modelFamily = serializers.IntegerField(write_only=True)
-    technology = serializers.IntegerField(write_only=True)
+    technology = serializers.IntegerField(write_only=True,required=False)
     status = serializers.IntegerField(write_only=True,required=False)  # ✅ FK field (ID)
 
     # General details
@@ -506,7 +506,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     customImpedance = serializers.CharField(write_only=True, required=False, allow_null=True, allow_blank=True)
     interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
     caseStyleType = serializers.CharField(write_only=True,required=False, allow_blank=True)
-    CaseStyle = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    caseStyle = serializers.CharField(write_only=True, required=False, allow_blank=True)
     caseDimensions = serializers.JSONField(write_only=True,required=False)
     ports = serializers.JSONField(write_only=True,required=False)
     enclosureDetails = serializers.JSONField(write_only=True,required=False)
@@ -526,14 +526,14 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
     can = serializers.JSONField(write_only=True, required=False)
     pcbList = serializers.JSONField(write_only=True, required=False)
-    capacitors = serializers.JSONField(write_only=True, required=False)
-    inductors = serializers.JSONField(write_only=True, required=False)
-    airCoils = serializers.JSONField(write_only=True, required=False)
+    chipCapacitors = serializers.JSONField(write_only=True, required=False)
+    chipInductors = serializers.JSONField(write_only=True, required=False)
+    chipAirCoils = serializers.JSONField(write_only=True, required=False)
     transformers = serializers.JSONField(write_only=True, required=False)
     resonatorList = serializers.JSONField(write_only=True, required=False)
     copperFlapList = serializers.JSONField(write_only=True, required=False)
     ltccList = serializers.JSONField(write_only=True, required=False)
-    resistors = serializers.JSONField(write_only=True, required=False)
+    chipResistors = serializers.JSONField(write_only=True, required=False)
     shieldList = serializers.JSONField(write_only=True, required=False)
     fingerList = serializers.JSONField(write_only=True, required=False)
     specialRequirements = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -542,13 +542,13 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         model = PiBaseRecord
         fields = [
             'opNumber', 'opuNumber', 'eduNumber', 'modelFamily', 'modelName', 'technology', 'status',
-            'impedance', 'customImpedance', 'interfaces', 'caseStyleType', 'CaseStyle',
+            'impedance', 'customImpedance', 'interfaces', 'caseStyleType', 'caseStyle',
             'caseDimensions', 'ports', 'enclosureDetails', 'topcoverDetails',
             'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
             'signalLaunchType', 'coverType', 'designRuleViolation',
             'similarModel', 'schematicFile', 'selectedComponents',
-            'can', 'pcbList', 'capacitors', 'inductors', 'airCoils', 'transformers',
-            'resonatorList', 'copperFlapList', 'ltccList', 'resistors', 'shieldList',
+            'can', 'pcbList', 'chipCapacitors', 'chipInductors', 'chipAirCoils', 'transformers',
+            'resonatorList', 'copperFlapList', 'ltccList', 'chipResistors', 'shieldList',
             'fingerList', 'specialRequirements'
         ]
 
@@ -556,24 +556,33 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         print("Full incoming payload:", self.initial_data)
-        instance = self.instance
-        op_no = data.get('op_no')
-        opu_no = data.get('opu_no')
-        edu_no = data.get('edu_no')
-        model_name = data.get('model_name')
 
-        errors = {}
-        if PiBaseRecord.objects.filter(op_no=op_no).exclude(id=instance.id if instance else None).exists():
-            errors['opNumber'] = 'OP Number already exists.'
-        if PiBaseRecord.objects.filter(opu_no=opu_no).exclude(id=instance.id if instance else None).exists():
-            errors['opuNumber'] = 'OPU Number already exists.'
-        if PiBaseRecord.objects.filter(edu_no=edu_no).exclude(id=instance.id if instance else None).exists():
-            errors['eduNumber'] = 'EDU Number already exists.'
-        if PiBaseRecord.objects.filter(model_name=model_name).exclude(id=instance.id if instance else None).exists():
-            errors['modelName'] = 'Model Name already exists.'
-        if errors:
-            raise serializers.ValidationError(errors)
+        # Only validate uniqueness on create (i.e., self.instance is None)
+        if self.instance is None:
+            errors = {}
+
+            op_no = data.get('op_no') or self.initial_data.get('opNumber')
+            opu_no = data.get('opu_no') or self.initial_data.get('opuNumber')
+            edu_no = data.get('edu_no') or self.initial_data.get('eduNumber')
+            model_name = data.get('model_name') or self.initial_data.get('modelName')
+
+            if op_no and PiBaseRecord.objects.filter(op_no=op_no).exists():
+                errors['opNumber'] = 'OP Number already exists.'
+
+            if opu_no and PiBaseRecord.objects.filter(opu_no=opu_no).exists():
+                errors['opuNumber'] = 'OPU Number already exists.'
+
+            if edu_no and PiBaseRecord.objects.filter(edu_no=edu_no).exists():
+                errors['eduNumber'] = 'EDU Number already exists.'
+
+            if model_name and PiBaseRecord.objects.filter(model_name=model_name).exists():
+                errors['modelName'] = 'Model Name already exists.'
+
+            if errors:
+                raise serializers.ValidationError(errors)
+
         return data
+
 
     def create(self, validated_data):
         user = self.context['request'].user  # Get user from context
@@ -645,7 +654,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
         instance.case_style_data = {
             "caseStyleType": self.initial_data.get("caseStyleType"),
-            "CaseStyle": self.initial_data.get("CaseStyle", ""),
+            "caseStyle": self.initial_data.get("caseStyle", ""),
             "caseDimensions": safe_json_load(self.initial_data.get("caseDimensions")),
         }
 
@@ -659,14 +668,14 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         json_fields = [
             ('can_details', 'can'),
             ('pcb_details', 'pcbList'),
-            ('capacitor_details', 'capacitors'),
-            ('inductor_details', 'inductors'),
-            ('aircoil_details', 'airCoils'),
+            ('capacitor_details', 'chipCapacitors'),
+            ('inductor_details', 'chipInductors'),
+            ('aircoil_details', 'chipAirCoils'),
             ('transformer_details', 'transformers'),
             ('resonator_details', 'resonatorList'),
             ('copper_flaps_details', 'copperFlapList'),
             ('ltcc_details', 'ltccList'),
-            ('resistor_details', 'resistors'),
+            ('resistor_details', 'chipResistors'),
             ('shield_details', 'shieldList'),
             ('finger_details', 'fingerList')
         ]
@@ -686,10 +695,6 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         user = self.context['request'].user  # Get user from context
         instance.updated_by = user  # Set updated_by on update
 
-        # Update basic fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
         # Update ForeignKey fields similarly to create method
         fk_field_map = {
             'modelFamily': 'model_family',
@@ -701,6 +706,11 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'coverType': 'cover_type',
             'designRuleViolation': 'design_rule_violation_accepted'
         }
+
+        for attr, value in validated_data.items():
+            if attr not in fk_field_map.values() and attr != 'status':  # skip FK fields for now
+                setattr(instance, attr, value)
+
         for input_field, model_field in fk_field_map.items():
             value = self.initial_data.get(input_field)
             if value is not None:
@@ -746,7 +756,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
         instance.case_style_data = {
             "caseStyleType": self.initial_data.get("caseStyleType"),
-            "CaseStyle": self.initial_data.get("CaseStyle", ""),
+            "caseStyle": self.initial_data.get("caseStyle", ""),
             "caseDimensions": safe_json_load(self.initial_data.get("caseDimensions")),
         }
 
@@ -759,14 +769,14 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         json_fields = [
             ('can_details', 'can'),
             ('pcb_details', 'pcbList'),
-            ('capacitor_details', 'capacitors'),
-            ('inductor_details', 'inductors'),
-            ('aircoil_details', 'airCoils'),
+            ('capacitor_details', 'chipCapacitors'),
+            ('inductor_details', 'chipInductors'),
+            ('aircoil_details', 'chipAirCoils'),
             ('transformer_details', 'transformers'),
             ('resonator_details', 'resonatorList'),
             ('copper_flaps_details', 'copperFlapList'),
             ('ltcc_details', 'ltccList'),
-            ('resistor_details', 'resistors'),
+            ('resistor_details', 'chipResistors'),
             ('shield_details', 'shieldList'),
             ('finger_details', 'fingerList')
         ]
