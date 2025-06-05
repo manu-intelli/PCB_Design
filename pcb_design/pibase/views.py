@@ -133,6 +133,10 @@ class GroupedFieldOptionsView(APIView):
                     {"label": sub.sub_category_name, "value": sub.id}
                     for sub in subcategories
                 ]
+                # Add "Others" option only for DIELECTRIC_MATERIAL_OPTIONS
+                if response_key == "DIELECTRIC_MATERIAL_OPTIONS":
+                    data[response_key].append({"label": "Others", "value": 10000})
+                    
             except MstCategory.DoesNotExist:
                 pi_base_logs.warning(f"MstCategory not found for: {cat_name}")
                 data[response_key] = []
