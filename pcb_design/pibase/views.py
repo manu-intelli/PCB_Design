@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions,status
+from rest_framework import generics, permissions,status,filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from authentication.custom_permissions import IsAuthorized
@@ -65,10 +65,18 @@ class PiBaseRecordPagination(PageNumberPagination):
 
 # =====================================================================================================================================
 
+from django_filters.rest_framework import DjangoFilterBackend
+
 class PiBaseRecordListView(generics.ListAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordSerializer
-    pagination_class = PiBaseRecordPagination  # explicitly add pagination here
+    pagination_class = PiBaseRecordPagination
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status']  # For exact filtering (e.g., ?status=2)
+    search_fields = ['model_name', 'op_no', 'opu_no', 'edu_no']  # For text search
+    ordering_fields = ['id', 'model_name', 'op_no', 'opu_no', 'edu_no', 'created_at', 'revision_number']
+    ordering = ['-created_at']  # Default ordering
 
 # =====================================================================================================================================
 

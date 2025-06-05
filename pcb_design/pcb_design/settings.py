@@ -128,6 +128,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'authentication.custom_permissions.IsAuthorized',  # Custom permission class
     ),
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
 
 # JWT token expiration settings
