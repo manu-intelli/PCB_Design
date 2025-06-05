@@ -29,20 +29,32 @@ from .serializers import (
 )
 import uuid
 
+from masters.models import MstCategory,MstSubCategory
+
+from . import pi_base_logs
+
+# =====================================================================================================================================
+
 class PiBaseComponentListView(generics.ListAPIView):
     queryset = PiBaseComponent.objects.all()
     serializer_class = PiBaseComponentSerializer
     pagination_class = None
+
+# =====================================================================================================================================
 
 class PiBaseFieldCategoryListView(generics.ListAPIView):
     queryset = PiBaseFieldCategory.objects.all()
     serializer_class = PiBaseFieldCategorySerializer
     pagination_class = None
 
+# =====================================================================================================================================
+
 class PiBaseFieldOptionListView(generics.ListAPIView):
     queryset = PiBaseFieldOption.objects.all()
     serializer_class = PiBaseFieldOptionSerializer
     pagination_class = None
+
+# =====================================================================================================================================
 
 from rest_framework.pagination import PageNumberPagination
 
@@ -51,11 +63,14 @@ class PiBaseRecordPagination(PageNumberPagination):
     page_size_query_param = 'page_size'  # optional, allow client to set page size in query param
     max_page_size = 100
 
+# =====================================================================================================================================
+
 class PiBaseRecordListView(generics.ListAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordSerializer
     pagination_class = PiBaseRecordPagination  # explicitly add pagination here
 
+# =====================================================================================================================================
 
 class PiBaseRecordStepOneCreateView(generics.CreateAPIView):
     queryset = PiBaseRecord.objects.all()
@@ -66,24 +81,68 @@ class PiBaseRecordStepOneCreateView(generics.CreateAPIView):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+# =====================================================================================================================================
 
 class GroupedFieldOptionsView(APIView):
+    """
+    API View to return grouped field options for PiBaseFieldCategory and selected MstCategory values.
+
+    Returns a dictionary where each key corresponds to a group of selectable options,
+    formatted as LABEL_VALUE pairs for dropdowns or similar components.
+
+    Example Response:
+    {
+        "DIELECTRIC_MATERIAL_OPTIONS": [{"label": "FR4", "value": 1}, ...],
+        "COPPER_THICKNESS_OPTIONS": [{"label": "35µm", "value": 3}, ...],
+        ...
+    }
+    """
+
     def get(self, request):
-        categories = PiBaseFieldCategory.objects.filter(status=True).prefetch_related('options')
         data = {}
 
-        for category in categories:
-            # Convert category name to uppercase, replace spaces with underscores and append '_OPTIONS'
-            key = category.name.upper().replace(' ', '_') + '_OPTIONS'
+        # Get PiBaseFieldCategory-related options
+        try:
+            categories = PiBaseFieldCategory.objects.filter(status=True).prefetch_related('options')
+            for category in categories:
+                key = category.name.upper().replace(' ', '_') + '_OPTIONS'
+                options_list = [
+                    {"label": option.value, "value": option.id}
+                    for option in category.options.filter(status=True)
+                ]
+                data[key] = options_list
+        except Exception as e:
+            pi_base_logs.error(f"Error fetching PiBaseFieldCategory options: {str(e)}")
+            return Response(
+                {"detail": "Error retrieving field category options."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-            # Prepare options list with label and value
-            options_list = [
-                {"label": option.value, "value": option.id} for option in category.options.filter(status=True)
-            ]
+        # Custom MstCategory-based groups to include
+        category_names_to_include = {
+            "Dielectric material": "DIELECTRIC_MATERIAL_OPTIONS",
+            "Copper Thickness": "COPPER_THICKNESS_OPTIONS",
+            "Dielectric Thickness": "DIELECTRIC_THICKNESS_OPTIONS"
+        }
 
-            data[key] = options_list
+        for cat_name, response_key in category_names_to_include.items():
+            try:
+                category = MstCategory.objects.get(category_name__iexact=cat_name)
+                subcategories = MstSubCategory.objects.filter(category_Id=category.id)
+                data[response_key] = [
+                    {"label": sub.sub_category_name, "value": sub.id}
+                    for sub in subcategories
+                ]
+            except MstCategory.DoesNotExist:
+                pi_base_logs.warning(f"MstCategory not found for: {cat_name}")
+                data[response_key] = []
+            except Exception as e:
+                pi_base_logs.error(f"Error fetching subcategories for {cat_name}: {str(e)}")
+                data[response_key] = []
 
-        return Response(data)
+        return Response(data, status=status.HTTP_200_OK)
+    
+# =====================================================================================================================================
 
 class CheckPiBaseRecordUniqueView(APIView):
 
@@ -123,12 +182,15 @@ class CheckPiBaseRecordUniqueView(APIView):
         # If input data itself is invalid
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# =====================================================================================================================================
+
 class PiBaseRecordDetailAPIView(generics.CreateAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordFullSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
 
+# =====================================================================================================================================
     
 class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
     serializer_class = PiBaseRecordFullSerializer
@@ -149,6 +211,7 @@ class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
                 return obj
         raise Http404("Record not found")
 
+# =====================================================================================================================================
 
 class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
     queryset = PiBaseRecord.objects.all()
@@ -226,6 +289,7 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
     ),
     responses={200: "Record updated successfully", 400: "Validation error"}
 )
+    
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', True)
         instance = self.get_object()
@@ -234,15 +298,6 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
         self.perform_update(serializer)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # def get(self, request, *args, **kwargs):
-    #     """
-    #     Fetch the entire PiBase record based on the UUID.
-    #     Ignores currentStep and returns all data using a full serializer.
-    #     """
-    #     instance = self.get_object()
-    #     # import inside if needed
-    #     serializer = PiBaseRecordGetSerializer(instance)
-    #     return Response(serializer.data, status=status.HTTP_200_OK)
 
     def get(self, request, *args, **kwargs):
         instance = self.get_object() # This method should be defined in your actual view
@@ -269,7 +324,7 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
             "designRuleViolation": data.get("designRuleViolation"),
             "currentStep": data.get("current_step"),
             "caseStyleType": data.get("case_style_data", {}).get("caseStyleType"),
-            "caseStyle": data.get("case_style_data", {}).get("CaseStyle"),
+            "caseStyle": data.get("case_style_data", {}).get("caseStyle"),
             "interfaces": data.get("package_details", {}).get("interfaces"),
             "caseDimensions": data.get("case_style_data", {}).get("caseDimensions"),
             "ports": data.get("package_details", {}).get("ports"),
@@ -292,3 +347,5 @@ class PiBaseRecordPartialUpdateView(generics.RetrieveUpdateAPIView):
         }
 
         return Response(transformed, status=status.HTTP_200_OK)
+
+# =====================================================================================================================================
