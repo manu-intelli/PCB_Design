@@ -58,45 +58,66 @@ class PiBaseComponent(models.Model):
 
 class PiBaseStatus(models.Model):
     STATUS_CHOICES = (
-        ('1', 'Pending'),
-        ('2', 'Complete'),
-        ('3', 'Close'),
-        ('4', 'Delete'),
+        (1, 'Pending'),
+        (2, 'Complete'),
+        (3, 'Close'),
+        (4, 'Delete'),
     )
 
-    name = models.CharField(max_length=20, choices=STATUS_CHOICES, unique=True)
+    status_code = models.PositiveSmallIntegerField(choices=STATUS_CHOICES, unique=True)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name
+        return dict(self.STATUS_CHOICES).get(self.status_code, "Unknown")
 
     class Meta:
         db_table = 'PiBaseStatus'
 
+
+
+class PiBaseImage(models.Model):
+    image_type = models.CharField(max_length=50, help_text="e.g. schematic, layout")
+    image_file = models.FileField(upload_to='schematics/', blank=True, null=True)
+    cookies = models.CharField(max_length=100, blank=True, null=True)  # optional metadata
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.image_type} Image"
+
+    class Meta:
+        db_table = 'PiBaseImage'
 
 class PiBaseRecord(models.Model):
     op_no = models.CharField(max_length=20, verbose_name="OP Number")
     opu_no = models.CharField(max_length=20, verbose_name="OPU Number")
     edu_no = models.CharField(max_length=20, verbose_name="EDU Number")
     model_name = models.CharField(max_length=100)
-  
-    schematic = models.FileField(upload_to='schematics/', blank=True, null=True)
+    schematic = models.ForeignKey(
+        PiBaseImage, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='schematic_records',
+        help_text="Schematic image reference"
+    )
     similar_model_layout = models.TextField(blank=True, null=True)
     revision_number = models.CharField(max_length=20)
 
-    technology = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_technology', verbose_name="Technology")
-    model_family = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_model_family', verbose_name="Model Family")
-    bottom_solder_mask = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_bottom_solder_mask', verbose_name="Bottom Solder Mask")
-    half_moon_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_half_moon_requirement', verbose_name="Half Moon Requirement")
-    via_holes_on_signal_pads = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_via_holes_on_signal_pads', verbose_name="Via Holes Requirement")
-    signal_launch_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_signal_launch_type', verbose_name="Signal Launch Type")
-    cover_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_cover_type', verbose_name="Cover Type")
-    design_rule_violation_accepted = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True, related_name='device_design_rule_violation_accepted', verbose_name="Design Rule Violation")
+    technology = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_technology', verbose_name="Technology")
+    model_family = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_model_family', verbose_name="Model Family")
+    bottom_solder_mask = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True ,related_name='device_bottom_solder_mask', verbose_name="Bottom Solder Mask")
+    half_moon_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_half_moon_requirement', verbose_name="Half Moon Requirement")
+    via_holes_on_signal_pads = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_via_holes_on_signal_pads', verbose_name="Via Holes Requirement")
+    signal_launch_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_signal_launch_type', verbose_name="Signal Launch Type")
+    cover_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_cover_type', verbose_name="Cover Type")
+    design_rule_violation_accepted = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_design_rule_violation_accepted', verbose_name="Design Rule Violation")
 
     impedance_selection = models.JSONField(default=dict, verbose_name="Impedance Selection")
-    package_details = models.JSONField(default=dict, blank=True, null=True, verbose_name="Package Details")
+    interfaces_details = models.JSONField(default=dict, blank=True, null=True, verbose_name="Interfaces Details")
     case_style_data = models.JSONField(default=dict, verbose_name="Case Style Data")
 
     components = models.ManyToManyField(PiBaseComponent, blank=True, related_name='devices')
@@ -104,10 +125,10 @@ class PiBaseRecord(models.Model):
     # Hardware fields
     can_details = models.JSONField(default=dict, blank=True, null=True)
     pcb_details = models.JSONField(default=dict, blank=True, null=True)
-    aircoil_details = models.JSONField(default=dict, blank=True, null=True)
-    inductor_details = models.JSONField(default=dict, blank=True, null=True)
-    capacitor_details = models.JSONField(default=dict, blank=True, null=True)
-    resistor_details = models.JSONField(default=dict, blank=True, null=True)
+    chip_aircoil_details = models.JSONField(default=dict, blank=True, null=True)
+    chip_inductor_details = models.JSONField(default=dict, blank=True, null=True)
+    chip_capacitor_details = models.JSONField(default=dict, blank=True, null=True)
+    chip_resistor_details = models.JSONField(default=dict, blank=True, null=True)
     transformer_details = models.JSONField(default=dict, blank=True, null=True)
     shield_details = models.JSONField(default=dict, blank=True, null=True)
     finger_details = models.JSONField(default=dict, blank=True, null=True)
@@ -117,11 +138,9 @@ class PiBaseRecord(models.Model):
 
     special_requirements = models.TextField(blank=True, null=True, verbose_name="Special Requirements")
 
-    status = models.ForeignKey(PiBaseStatus, on_delete=models.SET_NULL, null=True, blank=True, related_name="device_models")
+    status = models.ForeignKey(PiBaseStatus, on_delete=models.SET_NULL,default=1, null=True, blank=True, related_name="device_models")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records')
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records_updated')
-
-    current_step = models.PositiveSmallIntegerField(default=1)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
