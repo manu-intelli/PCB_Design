@@ -96,6 +96,10 @@ class PiBaseRecordListView(generics.ListAPIView):
     ]
     ordering = ["-created_at"]  # Default ordering
 
+    def get_queryset(self):
+        # Return only records created by the current user
+        return PiBaseRecord.objects.filter(created_by=self.request.user)
+
 
 # =====================================================================================================================================
 
