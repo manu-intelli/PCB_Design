@@ -73,7 +73,7 @@ ROOT_URLCONF = 'pcb_design.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],  # Add your template directories here if required
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # Add your template directories here if required
         'APP_DIRS': True,  # Enable app-specific template directories
         'OPTIONS': {
             'context_processors': [

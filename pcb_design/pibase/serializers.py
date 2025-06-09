@@ -89,13 +89,19 @@ class PiBaseImageSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class PiBaseRecordGetSerializer(serializers.ModelSerializer):
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
 
-class BlankToNullIntegerField(serializers.IntegerField):
-    def to_internal_value(self, data):
-        if data == "":
-            return None
-        return super().to_internal_value(data)
-    
+    class Meta:
+        model = PiBaseRecord
+        fields = '__all__'  # Includes all model fields
+        # Add schematicData explicitly to the output
+        extra_fields = ['schematicData']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        # Add the schematicData explicitly if needed (not required if you use 'schematicData' as field)
+        return representation
 
 
 class PiBaseRecordFullSerializer(serializers.ModelSerializer):
@@ -156,14 +162,14 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
     # Nested JSON fields
     impedanceSelection = serializers.JSONField(source='impedance_selection', required=False)
-    interfacesDetails = serializers.JSONField(source='interfaces_details', required=False)
+    interfaces = serializers.JSONField(source='interfaces_details', required=False)
     caseStyleData = serializers.JSONField(source='case_style_data', required=False)
     canDetails = serializers.JSONField(source='can_details', required=False)
-    pcbDetails = serializers.JSONField(source='pcb_details', required=False)
-    chipAircoilDetails = serializers.JSONField(source='chip_aircoil_details', required=False)
-    chipInductorDetails = serializers.JSONField(source='chip_inductor_details', required=False)
-    chipCapacitorDetails = serializers.JSONField(source='chip_capacitor_details', required=False)
-    chipResistorDetails = serializers.JSONField(source='chip_resistor_details', required=False)
+    pcbList = serializers.JSONField(source='pcb_details', required=False)
+    chipAirCoils = serializers.JSONField(source='chip_aircoil_details', required=False)
+    chipInductors = serializers.JSONField(source='chip_inductor_details', required=False)
+    chipCapacitors = serializers.JSONField(source='chip_capacitor_details', required=False)
+    chipResistors = serializers.JSONField(source='chip_resistor_details', required=False)
     transformerDetails = serializers.JSONField(source='transformer_details', required=False)
     shieldDetails = serializers.JSONField(source='shield_details', required=False)
     fingerDetails = serializers.JSONField(source='finger_details', required=False)
@@ -193,9 +199,9 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'caseDimensions', 'ports', 'enclosureDetails', 'topcoverDetails',
             'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
             'signalLaunchType', 'coverType', 'designRuleViolation',
-            'impedanceSelection', 'interfacesDetails', 'caseStyleData',
-            'canDetails', 'pcbDetails', 'chipAircoilDetails', 'chipInductorDetails',
-            'chipCapacitorDetails', 'chipResistorDetails', 'transformerDetails',
+            'impedanceSelection',  'caseStyleData',
+            'canDetails', 'pcbList', 'chipAirCoils', 'chipInductors',
+            'chipCapacitors', 'chipResistors', 'transformerDetails',
             'shieldDetails', 'fingerDetails', 'copperFlapsDetails', 'resonatorDetails',
             'ltccDetails', 'selectedComponents', 'schematicFile','schematicData',
             'similarModel', 'specialRequirements', 'created_at', 'updated_at'
@@ -251,7 +257,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             "impedance": self.initial_data.get("impedance"),
             "customImpedance": self.initial_data.get("customImpedance")
         }
-        instance.package_details = {
+        instance.interfaces_details = {
             "interfaces": self.initial_data.get("interfaces"),
             "ports": self.initial_data.get("ports"),
             "enclosureDetails": self.initial_data.get("enclosureDetails"),

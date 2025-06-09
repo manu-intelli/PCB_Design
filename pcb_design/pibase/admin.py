@@ -74,3 +74,4 @@ class PiBaseRecordAdmin(ImportExportModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at")
     ordering = ("-created_at",)
+

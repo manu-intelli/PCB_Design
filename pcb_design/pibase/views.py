@@ -22,6 +22,7 @@ from .serializers import (
     PiBaseRecordUniquenessSerializer,
     PiBaseRecordFullSerializer,
     PiBaseImageSerializer,
+    PiBaseRecordGetSerializer
 )
 import uuid
 
@@ -248,7 +249,7 @@ class PiBaseRecordUpdateAPIView(generics.UpdateAPIView):
 
 
 class PiBaseRecordRetrieveAPIView(generics.RetrieveAPIView):
-    serializer_class = PiBaseRecordFullSerializer
+    serializer_class = PiBaseRecordGetSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
 
