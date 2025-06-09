@@ -162,7 +162,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
     # Nested JSON fields
     impedanceSelection = serializers.JSONField(source='impedance_selection', required=False)
-    interfaces = serializers.JSONField(source='interfaces_details', required=False)
+    interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
     caseStyleData = serializers.JSONField(source='case_style_data', required=False)
     canDetails = serializers.JSONField(source='can_details', required=False)
     pcbList = serializers.JSONField(source='pcb_details', required=False)
