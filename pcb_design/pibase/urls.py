@@ -8,8 +8,10 @@ from .views import (
     PiBaseFieldOptionListView,
     GroupedFieldOptionsView,
     CheckPiBaseRecordUniqueView,
-    PiBaseRecordDetailAPIView,
-    PiBaseRecordDetailAPIViewUpdate,PiBaseImageViewSet
+    PiBaseImageViewSet,
+    PiBaseRecordCreateAPIView,
+    PiBaseRecordUpdateAPIView,
+    PiBaseRecordRetrieveAPIView,
 )
 
 router = DefaultRouter()
@@ -22,7 +24,8 @@ urlpatterns = [
     path('field-options/grouped/', GroupedFieldOptionsView.as_view(), name='grouped-field-options'),
     path('records/', PiBaseRecordListView.as_view(), name='records-list'),
     path('check-unique/', CheckPiBaseRecordUniqueView.as_view(), name='check-pibase-unique'),
-    path('records/create/', PiBaseRecordDetailAPIView.as_view(), name='pibase-create'),
-    path('records/update/<uuid:record_id>/', PiBaseRecordDetailAPIViewUpdate.as_view(), name='pibase-update'),
+    path('records/create/', PiBaseRecordCreateAPIView.as_view(), name='pibase-create'),
+    path('records/update/<uuid:record_id>/', PiBaseRecordUpdateAPIView.as_view(), name='pibase-update'),
+    path('records/get/<uuid:record_id>/', PiBaseRecordRetrieveAPIView.as_view(), name='pibase-get'),
     path('', include(router.urls)),
 ]

@@ -83,13 +83,13 @@ class PiBaseRecordListView(generics.ListAPIView):
         filters.OrderingFilter,
     ]
     filterset_fields = ["status"]  # For exact filtering (e.g., ?status=2)
-    search_fields = ["model_name", "op_no", "opu_no", "edu_no"]  # For text search
+    search_fields = ["model_name", "op_number", "opu_number", "edu_number"]  # For text search
     ordering_fields = [
         "id",
         "model_name",
-        "op_no",
-        "opu_no",
-        "edu_no",
+        "op_number",
+        "opu_number",
+        "edu_number",
         "created_at",
         "revision_number",
     ]
@@ -184,20 +184,20 @@ class CheckPiBaseRecordUniqueView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = PiBaseRecordUniquenessSerializer(data=request.data)
         if serializer.is_valid():
-            op_no = serializer.validated_data.get("op_no")
-            opu_no = serializer.validated_data.get("opu_no")
-            edu_no = serializer.validated_data.get("edu_no")
+            op_number = serializer.validated_data.get("op_number")
+            opu_number = serializer.validated_data.get("opu_number")
+            edu_number = serializer.validated_data.get("edu_number")
             model_name = serializer.validated_data.get("model_name")
 
             results = {
-                "op_no": {
-                    "unique": not PiBaseRecord.objects.filter(op_no=op_no).exists(),
+                "op_number": {
+                    "unique": not PiBaseRecord.objects.filter(op_number=op_number).exists(),
                 },
-                "opu_no": {
-                    "unique": not PiBaseRecord.objects.filter(opu_no=opu_no).exists(),
+                "opu_number": {
+                    "unique": not PiBaseRecord.objects.filter(opu_number=opu_number).exists(),
                 },
-                "edu_no": {
-                    "unique": not PiBaseRecord.objects.filter(edu_no=edu_no).exists(),
+                "edu_number": {
+                    "unique": not PiBaseRecord.objects.filter(edu_number=edu_number).exists(),
                 },
                 "model_name": {
                     "unique": not PiBaseRecord.objects.filter(
@@ -223,17 +223,14 @@ class CheckPiBaseRecordUniqueView(APIView):
 # =====================================================================================================================================
 
 
-class PiBaseRecordDetailAPIView(generics.CreateAPIView):
+class PiBaseRecordCreateAPIView(generics.CreateAPIView):
     queryset = PiBaseRecord.objects.all()
     serializer_class = PiBaseRecordFullSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
 
 
-# =====================================================================================================================================
-
-
-class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
+class PiBaseRecordUpdateAPIView(generics.UpdateAPIView):
     serializer_class = PiBaseRecordFullSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
@@ -242,9 +239,6 @@ class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
         return PiBaseRecord.objects.all()
 
     def get_object(self):
-        """
-        Match UUID generated from model ID using uuid5(PiBase-{id}).
-        """
         record_uuid = self.kwargs.get("record_id")
         for obj in self.get_queryset():
             generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"PiBase-{obj.id}")
@@ -253,4 +247,21 @@ class PiBaseRecordDetailAPIViewUpdate(generics.RetrieveUpdateAPIView):
         raise Http404("Record not found")
 
 
+class PiBaseRecordRetrieveAPIView(generics.RetrieveAPIView):
+    serializer_class = PiBaseRecordFullSerializer
+    permission_classes = [IsAuthorized]
+    authentication_classes = [CustomJWTAuthentication]
+
+    def get_queryset(self):
+        return PiBaseRecord.objects.all()
+
+    def get_object(self):
+        record_uuid = self.kwargs.get("record_id")
+        for obj in self.get_queryset():
+            generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"PiBase-{obj.id}")
+            if str(generated_uuid) == str(record_uuid):
+                return obj
+        raise Http404("Record not found")
+
 # =====================================================================================================================================
+

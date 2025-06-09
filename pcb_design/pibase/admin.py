@@ -41,8 +41,8 @@ class PiBaseStatusAdmin(ImportExportModelAdmin):
 
 @admin.register(PiBaseImage)
 class PiBaseImageAdmin(ImportExportModelAdmin):
-    list_display = ("image_type", "image_file", "created_at", "updated_at")
-    search_fields = ("image_type",)
+    list_display = ("image_type", "image_file","cookies", "created_at", "updated_at")
+    search_fields = ("id",)
     readonly_fields = ("created_at", "updated_at")
 
 
@@ -50,23 +50,23 @@ class PiBaseImageAdmin(ImportExportModelAdmin):
 class PiBaseRecordAdmin(ImportExportModelAdmin):
     list_display = (
         "model_name",
-        "op_no",
+        "op_number",
         "status",
         "created_by",
         "updated_by",
         "created_at",
         "updated_at",
     )
-    search_fields = ("model_name", "op_no", "edu_no", "opu_no")
+    search_fields = ("model_name", "op_number", "edu_number", "opu_number")
     list_filter = ("status",)  # ✅ Correct tuple syntax
     autocomplete_fields = (
         "model_family",
         "bottom_solder_mask",
         "half_moon_requirement",
-        "via_holes_on_signal_pads",
+        "via_holes_requirement",
         "signal_launch_type",
         "cover_type",
-        "design_rule_violation_accepted",
+        "design_rule_violation",
         "status",
         "created_by",
         "updated_by",

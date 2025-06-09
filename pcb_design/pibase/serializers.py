@@ -5,6 +5,8 @@ from .models import PiBaseComponent,PiBaseFieldCategory,PiBaseRecord,PiBaseField
 from django.contrib.auth import get_user_model
 
 import json
+import string
+import random
 
 
 User = get_user_model()
@@ -58,15 +60,33 @@ class PiBaseRecordSerializer(serializers.ModelSerializer):
 
 
 class PiBaseRecordUniquenessSerializer(serializers.Serializer):
-    opNumber = serializers.CharField(source='op_no')
-    opuNumber = serializers.CharField(source='opu_no')
-    eduNumber = serializers.CharField(source='edu_no')
+    opNumber = serializers.CharField(source='op_number')
+    opuNumber = serializers.CharField(source='opu_number')
+    eduNumber = serializers.CharField(source='edu_number')
     modelName = serializers.CharField(source='model_name')
 
 class PiBaseImageSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = PiBaseImage
         fields = '__all__'
+
+    def _generate_unique_cookies(self):
+        chars = string.ascii_letters + string.digits
+        while True:
+            random_str = ''.join(random.choices(chars, k=22))
+            if not PiBaseImage.objects.filter(cookies=random_str).exists():
+                return random_str
+
+    def create(self, validated_data):
+        if 'cookies' not in validated_data or not validated_data['cookies']:
+            validated_data['cookies'] = self._generate_unique_cookies()
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        if 'cookies' not in validated_data or not validated_data['cookies']:
+            validated_data['cookies'] = self._generate_unique_cookies()
+        return super().update(instance, validated_data)
 
 
 
@@ -80,9 +100,9 @@ class BlankToNullIntegerField(serializers.IntegerField):
 
 class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     # Field aliases
-    opNumber = serializers.CharField(source='op_no')
-    opuNumber = serializers.CharField(source='opu_no')
-    eduNumber = serializers.CharField(source='edu_no')
+    opNumber = serializers.CharField(source='op_number')
+    opuNumber = serializers.CharField(source='opu_number')
+    eduNumber = serializers.CharField(source='edu_number')
     modelName = serializers.CharField(source='model_name')
 
     # Foreign key fields
@@ -118,8 +138,8 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         source='half_moon_requirement', required=False, allow_null=True
     )
     viaHolesRequirement = serializers.PrimaryKeyRelatedField(
-        queryset=PiBaseFieldOption.objects.filter(category__name='Via Holes On Signal Pads'),
-        source='via_holes_on_signal_pads', required=False, allow_null=True
+        queryset=PiBaseFieldOption.objects.filter(category__name='Via Holes Requirement'),
+        source='via_holes_requirement', required=False, allow_null=True
     )
     signalLaunchType = serializers.PrimaryKeyRelatedField(
         queryset=PiBaseFieldOption.objects.filter(category__name='Signal Launch Type'),
@@ -130,8 +150,8 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         source='cover_type', required=False, allow_null=True
     )
     designRuleViolation = serializers.PrimaryKeyRelatedField(
-        queryset=PiBaseFieldOption.objects.filter(category__name='Design Rule Violation Accepted'),
-        source='design_rule_violation_accepted', required=False, allow_null=True
+        queryset=PiBaseFieldOption.objects.filter(category__name='Design Rule Violation'),
+        source='design_rule_violation', required=False, allow_null=True
     )
 
     # Nested JSON fields
@@ -159,6 +179,8 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         queryset=PiBaseImage.objects.all(), source='schematic', required=False, allow_null=True
     )
 
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
+
     similarModel = serializers.CharField(source='similar_model_layout', required=False, allow_blank=True)
     specialRequirements = serializers.CharField(source='special_requirements', required=False, allow_blank=True)
 
@@ -175,38 +197,38 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'canDetails', 'pcbDetails', 'chipAircoilDetails', 'chipInductorDetails',
             'chipCapacitorDetails', 'chipResistorDetails', 'transformerDetails',
             'shieldDetails', 'fingerDetails', 'copperFlapsDetails', 'resonatorDetails',
-            'ltccDetails', 'selectedComponents', 'schematicFile',
+            'ltccDetails', 'selectedComponents', 'schematicFile','schematicData',
             'similarModel', 'specialRequirements', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'revision_number', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'revision_number' ,'created_at', 'updated_at']
 
     def validate(self, data):
         errors = {}
         instance = getattr(self, 'instance', None)
         
         # Get the values from the data or from the instance if updating
-        op_no = data.get('op_no', instance.op_no if instance else None)
-        opu_no = data.get('opu_no', instance.opu_no if instance else None)
-        edu_no = data.get('edu_no', instance.edu_no if instance else None)
+        op_number = data.get('op_number', instance.op_number if instance else None)
+        opu_number = data.get('opu_number', instance.opu_number if instance else None)
+        edu_number = data.get('edu_number', instance.edu_number if instance else None)
         model_name = data.get('model_name', instance.model_name if instance else None)
         
         # Check for duplicates, excluding the current instance if updating
-        if op_no:
-            qs = PiBaseRecord.objects.filter(op_no=op_no)
+        if op_number:
+            qs = PiBaseRecord.objects.filter(op_number=op_number)
             if instance:
                 qs = qs.exclude(pk=instance.pk)
             if qs.exists():
                 errors['opNumber'] = 'OP Number already exists.'
         
-        if opu_no:
-            qs = PiBaseRecord.objects.filter(opu_no=opu_no)
+        if opu_number:
+            qs = PiBaseRecord.objects.filter(opu_number=opu_number)
             if instance:
                 qs = qs.exclude(pk=instance.pk)
             if qs.exists():
                 errors['opuNumber'] = 'OPU Number already exists.'
         
-        if edu_no:
-            qs = PiBaseRecord.objects.filter(edu_no=edu_no)
+        if edu_number:
+            qs = PiBaseRecord.objects.filter(edu_number=edu_number)
             if instance:
                 qs = qs.exclude(pk=instance.pk)
             if qs.exists():
@@ -297,3 +319,5 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             instance.components.set(components)
 
         return instance
+    
+    

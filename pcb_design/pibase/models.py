@@ -91,10 +91,17 @@ class PiBaseImage(models.Model):
     class Meta:
         db_table = 'PiBaseImage'
 
+
+def get_default_status():
+    try:
+        return PiBaseStatus.objects.get(pk=1)
+    except PiBaseStatus.DoesNotExist:
+        return None
+
 class PiBaseRecord(models.Model):
-    op_no = models.CharField(max_length=20, verbose_name="OP Number")
-    opu_no = models.CharField(max_length=20, verbose_name="OPU Number")
-    edu_no = models.CharField(max_length=20, verbose_name="EDU Number")
+    op_number = models.CharField(max_length=20, verbose_name="OP Number")
+    opu_number = models.CharField(max_length=20, verbose_name="OPU Number")
+    edu_number = models.CharField(max_length=20, verbose_name="EDU Number")
     model_name = models.CharField(max_length=100)
     schematic = models.ForeignKey(
         PiBaseImage, 
@@ -111,16 +118,16 @@ class PiBaseRecord(models.Model):
     model_family = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_model_family', verbose_name="Model Family")
     bottom_solder_mask = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True ,related_name='device_bottom_solder_mask', verbose_name="Bottom Solder Mask")
     half_moon_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_half_moon_requirement', verbose_name="Half Moon Requirement")
-    via_holes_on_signal_pads = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_via_holes_on_signal_pads', verbose_name="Via Holes Requirement")
+    via_holes_requirement = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_via_holes_requirement', verbose_name="Via Holes Requirement")
     signal_launch_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_signal_launch_type', verbose_name="Signal Launch Type")
     cover_type = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_cover_type', verbose_name="Cover Type")
-    design_rule_violation_accepted = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_design_rule_violation_accepted', verbose_name="Design Rule Violation")
+    design_rule_violation = models.ForeignKey(PiBaseFieldOption, on_delete=models.SET_NULL, null=True,blank=True, related_name='device_design_rule_violation', verbose_name="Design Rule Violation")
 
     impedance_selection = models.JSONField(default=dict, verbose_name="Impedance Selection")
     interfaces_details = models.JSONField(default=dict, blank=True, null=True, verbose_name="Interfaces Details")
     case_style_data = models.JSONField(default=dict, verbose_name="Case Style Data")
 
-    components = models.ManyToManyField(PiBaseComponent, blank=True, related_name='devices')
+    components = models.ManyToManyField(PiBaseComponent, blank=True, related_name='pi_base_records_selected_components', verbose_name="Components")
 
     # Hardware fields
     can_details = models.JSONField(default=dict, blank=True, null=True)
@@ -138,7 +145,7 @@ class PiBaseRecord(models.Model):
 
     special_requirements = models.TextField(blank=True, null=True, verbose_name="Special Requirements")
 
-    status = models.ForeignKey(PiBaseStatus, on_delete=models.SET_NULL,default=1, null=True, blank=True, related_name="device_models")
+    status = models.ForeignKey(PiBaseStatus, on_delete=models.SET_NULL,default=get_default_status, null=True, blank=True, related_name="pi_base_records_status", verbose_name="Status")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records')
     updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pi_base_records_updated')
 
@@ -150,10 +157,10 @@ class PiBaseRecord(models.Model):
             'model_family': 'Model Family',
             'bottom_solder_mask': 'Bottom Solder Mask',
             'half_moon_requirement': 'Half Moon Requirement',
-            'via_holes_on_signal_pads': 'Via Holes On Signal Pads',
+            'via_holes_requirement': 'Via Holes Requirement',
             'signal_launch_type': 'Signal Launch Type',
             'cover_type': 'Cover Type',
-            'design_rule_violation_accepted': 'Design Rule Violation Accepted',
+            'design_rule_violation': 'Design Rule Violation',
         }
         for field_name, expected_category in category_map.items():
             option = getattr(self, field_name)
@@ -163,7 +170,7 @@ class PiBaseRecord(models.Model):
                 })
 
     def __str__(self):
-        return f"{self.model_name} (OP#{self.op_no})"
+        return f"{self.model_name} (OP#{self.op_number})"
 
     class Meta:
         verbose_name = "PiBaseRecord"
