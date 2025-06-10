@@ -1,0 +1,53 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h1>Unused Images</h1>
+    </div>
+    <div>
+        {% if user.is_authenticated %}
+            <span style="margin-right: 10px;">👤 Logged in as <strong>{{ user.username }}</strong></span>
+            <a href="{% url 'admin:logout' %}" class="button btn">Logout</a>
+        {% else %}
+            <a href="{% url 'admin:login' %}" class="button btn">Login</a>
+        {% endif %}
+    </div>
+</div>
+
+{% if deleted_count %}
+    <p style="color: green;">✅ {{ deleted_count }} unused images were deleted.</p>
+{% endif %}
+
+{% if unused_images %}
+    <form method="post">
+        {% csrf_token %}
+        <table class="adminlist">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Image Type</th>
+                    <th>Image File</th>
+                    <th>Created At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for image in unused_images %}
+                <tr>
+                    <td>{{ image.id }}</td>
+                    <td>{{ image.image_type }}</td>
+                    <td><a href="{{ image.image_file.url }}">{{ image.image_file.name }}</a></td>
+                    <td>{{ image.created_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" name="action" value="delete_all" class="button btn btn-danger">
+            🗑️ Delete All Unused Images
+        </button>
+    </form>
+{% else %}
+    <p>No unused images found.</p>
+{% endif %}
+{% endblock %}

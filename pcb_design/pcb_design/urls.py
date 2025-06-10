@@ -22,6 +22,7 @@ from drf_yasg import openapi
 from authentication.custom_authentication import CustomJWTAuthentication
 from django.conf import settings
 from django.conf.urls.static import static
+from pibase.custom_admin import admin_site
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -41,8 +42,11 @@ urlpatterns = [
     path('auth/', include('authentication.urls')),
     path('right-draw/', include('right_to_draw.urls')),
     path('masters/', include('masters.urls')),
-    path('admin/', admin.site.urls),
+    path('pibase/', include('pibase.urls')),
+    path('custom-page-admin/', admin_site.urls),             # your custom admin (with custom-page)
+    path('admin/', admin.site.urls), 
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
