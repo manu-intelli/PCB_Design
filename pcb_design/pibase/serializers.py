@@ -164,7 +164,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     impedanceSelection = serializers.JSONField(source='impedance_selection', required=False)
     interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
     caseStyleData = serializers.JSONField(source='case_style_data', required=False)
-    canDetails = serializers.JSONField(source='can_details', required=False)
+    can = serializers.JSONField(source='can_details', required=False)
     pcbList = serializers.JSONField(source='pcb_details', required=False)
     chipAirCoils = serializers.JSONField(source='chip_aircoil_details', required=False)
     chipInductors = serializers.JSONField(source='chip_inductor_details', required=False)
@@ -200,7 +200,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
             'signalLaunchType', 'coverType', 'designRuleViolation',
             'impedanceSelection',  'caseStyleData',
-            'canDetails', 'pcbList', 'chipAirCoils', 'chipInductors',
+            'can', 'pcbList', 'chipAirCoils', 'chipInductors',
             'chipCapacitors', 'chipResistors', 'transformers',
             'shieldList', 'fingerList', 'copperFlapList', 'resonatorList',
             'ltccList', 'selectedComponents', 'schematicFile','schematicData',
