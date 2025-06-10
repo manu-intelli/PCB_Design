@@ -16,6 +16,8 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'default-secret-key')
 # Environment setting (either 'LOCAL' or 'LIVE')
 SERVER_TYPE = os.getenv('SERVER_TYPE', 'LOCAL').upper()
 
+SERVER_NAME = os.getenv('SERVER_NAME',"LOCAL")
+
 # Debug mode: Set to True for local development
 DEBUG = True
 
@@ -91,7 +93,7 @@ WSGI_APPLICATION = 'pcb_design.wsgi.application'
 AUTH_USER_MODEL = 'authentication.CustomUser'
 
 # Database configuration
-ODBC_DRIVER = 'ODBC Driver 17 for SQL Server' if SERVER_TYPE == 'LOCAL' else 'ODBC Driver 13 for SQL Server'
+ODBC_DRIVER =  'ODBC Driver 17 for SQL Server' if SERVER_TYPE == 'LOCAL' else 'ODBC Driver 17 for SQL Server' if SERVER_NAME == 'PRODUCTION' else 'ODBC Driver 13 for SQL Server'
 
 DATABASES = {
     'default': {
@@ -160,6 +162,7 @@ if SERVER_TYPE == 'LOCAL':
 else:
     CORS_ALLOWED_ORIGINS = [
         f"{FRONTEND_IP}:{FRONTEND_PORT}",  # Allow frontend configured in .env for production
+         'http://localhost:5173' if SERVER_NAME == 'DEV' else ''
     ]
 
 # Allow credentials in CORS requests

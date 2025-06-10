@@ -9,8 +9,12 @@ class CustomJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):          
         if '/swagger/' in request.path:            
             return None
-    
-        user, token = super().authenticate(request)                
+
+        result = super().authenticate(request)
+        if result is None:
+            return None
+
+        user, token = result                
         if user and user.is_logged_out:
             raise AuthenticationFailed("User is logged out")
 
