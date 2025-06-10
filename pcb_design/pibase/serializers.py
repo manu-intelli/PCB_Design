@@ -124,7 +124,7 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     )
 
     # Input fields (raw)
-    impedance = serializers.CharField(write_only=True)
+    impedance = serializers.CharField(write_only=True,required=False, allow_blank=True)
     customImpedance = serializers.CharField(write_only=True, required=False, allow_blank=True)
     interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
     caseStyleType = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -170,12 +170,12 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
     chipInductors = serializers.JSONField(source='chip_inductor_details', required=False)
     chipCapacitors = serializers.JSONField(source='chip_capacitor_details', required=False)
     chipResistors = serializers.JSONField(source='chip_resistor_details', required=False)
-    transformerDetails = serializers.JSONField(source='transformer_details', required=False)
-    shieldDetails = serializers.JSONField(source='shield_details', required=False)
-    fingerDetails = serializers.JSONField(source='finger_details', required=False)
-    copperFlapsDetails = serializers.JSONField(source='copper_flaps_details', required=False)
-    resonatorDetails = serializers.JSONField(source='resonator_details', required=False)
-    ltccDetails = serializers.JSONField(source='ltcc_details', required=False)
+    transformers = serializers.JSONField(source='transformer_details', required=False)
+    shieldList = serializers.JSONField(source='shield_details', required=False)
+    fingerList = serializers.JSONField(source='finger_details', required=False)
+    copperFlapList = serializers.JSONField(source='copper_flaps_details', required=False)
+    resonatorList = serializers.JSONField(source='resonator_details', required=False)
+    ltccList = serializers.JSONField(source='ltcc_details', required=False)
 
     selectedComponents = serializers.PrimaryKeyRelatedField(
         queryset=PiBaseComponent.objects.all(), source='components', many=True, required=False
@@ -201,9 +201,9 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
             'signalLaunchType', 'coverType', 'designRuleViolation',
             'impedanceSelection',  'caseStyleData',
             'canDetails', 'pcbList', 'chipAirCoils', 'chipInductors',
-            'chipCapacitors', 'chipResistors', 'transformerDetails',
-            'shieldDetails', 'fingerDetails', 'copperFlapsDetails', 'resonatorDetails',
-            'ltccDetails', 'selectedComponents', 'schematicFile','schematicData',
+            'chipCapacitors', 'chipResistors', 'transformers',
+            'shieldList', 'fingerList', 'copperFlapList', 'resonatorList',
+            'ltccList', 'selectedComponents', 'schematicFile','schematicData',
             'similarModel', 'specialRequirements', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'revision_number' ,'created_at', 'updated_at']
