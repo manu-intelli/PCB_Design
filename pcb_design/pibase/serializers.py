@@ -8,6 +8,9 @@ import json
 import string
 import random
 
+import base64
+import mimetypes
+
 
 User = get_user_model()
 
@@ -66,7 +69,7 @@ class PiBaseRecordUniquenessSerializer(serializers.Serializer):
     modelName = serializers.CharField(source='model_name')
 
 class PiBaseImageSerializer(serializers.ModelSerializer):
-
+    base64_data = serializers.SerializerMethodField()
     class Meta:
         model = PiBaseImage
         fields = '__all__'
@@ -87,6 +90,18 @@ class PiBaseImageSerializer(serializers.ModelSerializer):
         if 'cookies' not in validated_data or not validated_data['cookies']:
             validated_data['cookies'] = self._generate_unique_cookies()
         return super().update(instance, validated_data)
+    
+    def get_base64_data(self, obj):
+        try:
+            file_path = obj.image_file.path
+            with open(file_path, 'rb') as f:
+                encoded_file = base64.b64encode(f.read()).decode('utf-8')
+                mime_type, _ = mimetypes.guess_type(file_path)
+                if not mime_type:
+                    mime_type = 'application/octet-stream'
+                return f'data:{mime_type};base64,{encoded_file}'
+        except Exception:
+            return None
 
 
 class PiBaseRecordGetSerializer(serializers.ModelSerializer):
