@@ -111,73 +111,75 @@ class PiBaseImageViewSet(viewsets.ModelViewSet):
 
 # =====================================================================================================================================
 
-
 class GroupedFieldOptionsView(APIView):
     """
-    API View to return grouped field options for PiBaseFieldCategory and selected MstCategory values.
+    API endpoint that returns grouped dropdown options for:
+    - PiBaseFieldCategory options (e.g., material types, layer types)
+    - MstCategory + MstSubCategory based groups (e.g., Copper Thickness)
 
-    Returns a dictionary where each key corresponds to a group of selectable options,
-    formatted as LABEL_VALUE pairs for dropdowns or similar components.
-
-    Example Response:
+    Response Format:
     {
-        "DIELECTRIC_MATERIAL_OPTIONS": [{"label": "FR4", "value": 1}, ...],
-        "COPPER_THICKNESS_OPTIONS": [{"label": "35µm", "value": 3}, ...],
+        "CATEGORY_NAME_OPTIONS": [{"label": "Option Label", "value": 1}, ...],
         ...
     }
     """
 
+    CATEGORY_MAP = {
+        "Dielectric material": ("DIELECTRIC_MATERIAL_OPTIONS", 10000),
+        "Copper Thickness": ("COPPER_THICKNESS_OPTIONS", 10001),
+        "Dielectric Thickness": ("DIELECTRIC_THICKNESS_OPTIONS", 10002),
+    }
+
     def get(self, request):
+        """
+        GET method to fetch grouped field options from PiBaseFieldCategory and MstCategory data sources.
+        """
         data = {}
-
-        # Get PiBaseFieldCategory-related options
-        try:
-            categories = PiBaseFieldCategory.objects.filter(
-                status=True
-            ).prefetch_related("options")
-            for category in categories:
-                key = category.name.upper().replace(" ", "_") + "_OPTIONS"
-                options_list = [
-                    {"label": option.value, "value": option.id}
-                    for option in category.options.filter(status=True)
-                ]
-                data[key] = options_list
-        except Exception as e:
-            pi_base_logs.error(f"Error fetching PiBaseFieldCategory options: {str(e)}")
-            return Response(
-                {"detail": "Error retrieving field category options."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        # Custom MstCategory-based groups to include
-        category_names_to_include = {
-            "Dielectric material": "DIELECTRIC_MATERIAL_OPTIONS",
-            "Copper Thickness": "COPPER_THICKNESS_OPTIONS",
-            "Dielectric Thickness": "DIELECTRIC_THICKNESS_OPTIONS",
-        }
-
-        for cat_name, response_key in category_names_to_include.items():
-            try:
-                category = MstCategory.objects.get(category_name__iexact=cat_name)
-                subcategories = MstSubCategory.objects.filter(category_Id=category.id)
-                data[response_key] = [
-                    {"label": sub.sub_category_name, "value": sub.id}
-                    for sub in subcategories
-                ]
-                # Add "Others" option only for DIELECTRIC_MATERIAL_OPTIONS
-                if response_key == "DIELECTRIC_MATERIAL_OPTIONS":
-                    data[response_key].append({"label": "Others", "value": 10000})
-
-            except MstCategory.DoesNotExist:
-                pi_base_logs.warning(f"MstCategory not found for: {cat_name}")
-                data[response_key] = []
-            except Exception as e:
-                pi_base_logs.error(
-                    f"Error fetching subcategories for {cat_name}: {str(e)}"
-                )
-                data[response_key] = []
-
+        self.add_pibase_field_options(data)
+        self.add_mst_category_options(data)
         return Response(data, status=status.HTTP_200_OK)
+
+    def add_pibase_field_options(self, data):
+        """
+        Adds options from PiBaseFieldCategory and its related options to the response dictionary.
+        Categories and their active options are formatted into {LABEL, VALUE} pairs.
+        """
+        try:
+            categories = PiBaseFieldCategory.objects.filter(status=True).prefetch_related("options")
+            for cat in categories:
+                try:
+                    key = f"{cat.name.upper().replace(' ', '_')}_OPTIONS"
+                    data[key] = [
+                        {"label": opt.value, "value": opt.id}
+                        for opt in cat.options.all() if opt.status
+                    ]
+                except Exception as inner_err:
+                    pi_base_logs.warning(f"Error processing category '{cat.name}': {str(inner_err)}")
+                    data[key] = []
+        except Exception as e:
+            pi_base_logs.error(f"[PiBase] Error fetching categories: {str(e)}")
+
+    def add_mst_category_options(self, data):
+        """
+        Adds mapped MstCategory and related MstSubCategory options to the response dictionary.
+        Each set is appended with an 'Others' item with a static fallback value.
+        """
+        for name, (key, other_value) in self.CATEGORY_MAP.items():
+            try:
+                category = MstCategory.objects.filter(category_name__iexact=name).only("id").first()
+                if not category:
+                    pi_base_logs.warning(f"[MstCategory] '{name}' not found.")
+                    data[key] = []
+                    continue
+
+                options = MstSubCategory.objects.filter(category_Id=category.id).only("id", "sub_category_name")
+                data[key] = [{"label": sub.sub_category_name, "value": sub.id} for sub in options]
+                data[key].append({"label": "Others", "value": other_value})
+
+            except Exception as e:
+                pi_base_logs.error(f"[MstSubCategory] Error for '{name}': {str(e)}")
+                data[key] = []
+
 
 
 # =====================================================================================================================================
