@@ -341,4 +341,3 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
         return instance
     
-    
