@@ -1,4 +1,23 @@
-from django.urls import path,include
+"""
+URL configuration for the pibase app.
+
+Defines API endpoints for listing, retrieving, creating, and updating PiBase models,
+as well as endpoints for grouped dropdown options, uniqueness checks, and image uploads.
+
+Endpoints:
+    - components/                : List all PiBaseComponent records.
+    - field-categories/          : List all PiBaseFieldCategory records.
+    - field-options/             : List all PiBaseFieldOption records.
+    - field-options/grouped/     : Get grouped dropdown options for fields.
+    - records/                   : List PiBaseRecord records for the current user.
+    - check-unique/              : Check uniqueness of PiBaseRecord fields.
+    - records/create/            : Create a new PiBaseRecord.
+    - records/update/<uuid>/     : Update an existing PiBaseRecord by UUID.
+    - records/get/<uuid>/        : Retrieve a PiBaseRecord by UUID.
+    - uploadimages/              : CRUD operations for PiBaseImage records (via router).
+"""
+
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
