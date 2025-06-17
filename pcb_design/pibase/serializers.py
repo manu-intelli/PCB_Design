@@ -1,74 +1,97 @@
-# pibase/serializers.py
+"""
+Serializers for the pibase app.
+
+These serializers handle conversion between PiBase models and JSON representations
+for API requests and responses. Includes custom validation, nested serializers,
+and utility fields for PiBaseRecord and related models.
+"""
+
 import uuid
 from rest_framework import serializers
-from .models import PiBaseComponent,PiBaseFieldCategory,PiBaseRecord,PiBaseFieldOption,PiBaseStatus,PiBaseImage
+from .models import (
+    PiBaseComponent, PiBaseFieldCategory, PiBaseRecord,
+    PiBaseFieldOption, PiBaseStatus, PiBaseImage
+)
 from django.contrib.auth import get_user_model
-
 import json
 import string
 import random
-
 import base64
 import mimetypes
 
-
 User = get_user_model()
 
-
-
 class StringifiedJSONField(serializers.JSONField):
+    """
+    Custom JSONField that accepts JSON strings and parses them to Python objects.
+    """
     def to_internal_value(self, data):
-        # If data is a string, try to parse JSON
         if isinstance(data, str):
             try:
                 data = json.loads(data)
             except json.JSONDecodeError as e:
                 raise serializers.ValidationError(f"Invalid JSON string: {e}")
         return super().to_internal_value(data)
-    
+
 def safe_json_load(raw):
+    """
+    Safely load a JSON string, returning None or the raw value on error.
+    """
     try:
         return json.loads(raw) if raw else None
     except Exception:
-        return raw  # or None, depending on what you prefer
-
+        return raw
 
 class PiBaseComponentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseComponent model.
+    """
     class Meta:
         model = PiBaseComponent
         fields = '__all__'
 
-
 class PiBaseFieldCategorySerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseFieldCategory model.
+    """
     class Meta:
         model = PiBaseFieldCategory
         fields = '__all__'
 
-
 class PiBaseFieldOptionSerializer(serializers.ModelSerializer):
-    category = PiBaseFieldCategorySerializer(read_only=True)  # nested category
+    """
+    Serializer for PiBaseFieldOption model, with nested category.
+    """
+    category = PiBaseFieldCategorySerializer(read_only=True)
     class Meta:
         model = PiBaseFieldOption
         fields = '__all__'
 
 class PiBaseRecordSerializer(serializers.ModelSerializer):
-    recordId = serializers.SerializerMethodField()  # add this field here
+    """
+    Serializer for PiBaseRecord model, with a UUID-based recordId field.
+    """
+    recordId = serializers.SerializerMethodField()
     class Meta:
         model = PiBaseRecord
         fields = '__all__'
 
     def get_recordId(self, obj):
-        # Generate a UUID based on the record's primary key (id)
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
 
-
 class PiBaseRecordUniquenessSerializer(serializers.Serializer):
+    """
+    Serializer for checking uniqueness of PiBaseRecord fields.
+    """
     opNumber = serializers.CharField(source='op_number')
     opuNumber = serializers.CharField(source='opu_number')
     eduNumber = serializers.CharField(source='edu_number')
     modelName = serializers.CharField(source='model_name')
 
 class PiBaseImageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseImage model, includes base64-encoded image data.
+    """
     base64_data = serializers.SerializerMethodField()
     class Meta:
         model = PiBaseImage
@@ -82,16 +105,25 @@ class PiBaseImageSerializer(serializers.ModelSerializer):
                 return random_str
 
     def create(self, validated_data):
-        if 'cookies' not in validated_data or not validated_data['cookies']:
-            validated_data['cookies'] = self._generate_unique_cookies()
-        return super().create(validated_data)
+        try:
+            if 'cookies' not in validated_data or not validated_data['cookies']:
+                validated_data['cookies'] = self._generate_unique_cookies()
+            return super().create(validated_data)
+        except Exception as e:
+            raise serializers.ValidationError(f"Error creating PiBaseImage: {e}")
 
     def update(self, instance, validated_data):
-        if 'cookies' not in validated_data or not validated_data['cookies']:
-            validated_data['cookies'] = self._generate_unique_cookies()
-        return super().update(instance, validated_data)
+        try:
+            if 'cookies' not in validated_data or not validated_data['cookies']:
+                validated_data['cookies'] = self._generate_unique_cookies()
+            return super().update(instance, validated_data)
+        except Exception as e:
+            raise serializers.ValidationError(f"Error updating PiBaseImage: {e}")
     
     def get_base64_data(self, obj):
+        """
+        Returns the image file as a base64-encoded data URI.
+        """
         try:
             file_path = obj.image_file.path
             with open(file_path, 'rb') as f:
@@ -103,23 +135,29 @@ class PiBaseImageSerializer(serializers.ModelSerializer):
         except Exception:
             return None
 
-
 class PiBaseRecordGetSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseRecord model, including schematic image data.
+    """
     schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
 
     class Meta:
         model = PiBaseRecord
-        fields = '__all__'  # Includes all model fields
-        # Add schematicData explicitly to the output
+        fields = '__all__'
         extra_fields = ['schematicData']
 
     def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        # Add the schematicData explicitly if needed (not required if you use 'schematicData' as field)
-        return representation
-
+        try:
+            representation = super().to_representation(instance)
+            return representation
+        except Exception as e:
+            raise serializers.ValidationError(f"Error serializing PiBaseRecord: {e}")
 
 class PiBaseRecordFullSerializer(serializers.ModelSerializer):
+    """
+    Full-featured serializer for PiBaseRecord, with field aliases, validation,
+    nested and related fields, and custom create/update logic.
+    """
     # Field aliases
     opNumber = serializers.CharField(source='op_number')
     opuNumber = serializers.CharField(source='opu_number')
@@ -224,121 +262,116 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'revision_number' ,'created_at', 'updated_at']
 
     def validate(self, data):
-        errors = {}
-        instance = getattr(self, 'instance', None)
-        
-        # Get the values from the data or from the instance if updating
-        op_number = data.get('op_number', instance.op_number if instance else None)
-        opu_number = data.get('opu_number', instance.opu_number if instance else None)
-        edu_number = data.get('edu_number', instance.edu_number if instance else None)
-        model_name = data.get('model_name', instance.model_name if instance else None)
-        
-        # Check for duplicates, excluding the current instance if updating
-        if op_number:
-            qs = PiBaseRecord.objects.filter(op_number=op_number)
-            if instance:
-                qs = qs.exclude(pk=instance.pk)
-            if qs.exists():
-                errors['opNumber'] = 'OP Number already exists.'
-        
-        if opu_number:
-            qs = PiBaseRecord.objects.filter(opu_number=opu_number)
-            if instance:
-                qs = qs.exclude(pk=instance.pk)
-            if qs.exists():
-                errors['opuNumber'] = 'OPU Number already exists.'
-        
-        if edu_number:
-            qs = PiBaseRecord.objects.filter(edu_number=edu_number)
-            if instance:
-                qs = qs.exclude(pk=instance.pk)
-            if qs.exists():
-                errors['eduNumber'] = 'EDU Number already exists.'
-        
-        if model_name:
-            qs = PiBaseRecord.objects.filter(model_name=model_name)
-            if instance:
-                qs = qs.exclude(pk=instance.pk)
-            if qs.exists():
-                errors['modelName'] = 'Model Name already exists.'
-        
-        if errors:
-            raise serializers.ValidationError(errors)
-        
-        return data
+        """
+        Validates uniqueness of op_number, opu_number, edu_number, and model_name.
+        """
+        try:
+            errors = {}
+            instance = getattr(self, 'instance', None)
+            op_number = data.get('op_number', instance.op_number if instance else None)
+            opu_number = data.get('opu_number', instance.opu_number if instance else None)
+            edu_number = data.get('edu_number', instance.edu_number if instance else None)
+            model_name = data.get('model_name', instance.model_name if instance else None)
+            if op_number:
+                qs = PiBaseRecord.objects.filter(op_number=op_number)
+                if instance:
+                    qs = qs.exclude(pk=instance.pk)
+                if qs.exists():
+                    errors['opNumber'] = 'OP Number already exists.'
+            if opu_number:
+                qs = PiBaseRecord.objects.filter(opu_number=opu_number)
+                if instance:
+                    qs = qs.exclude(pk=instance.pk)
+                if qs.exists():
+                    errors['opuNumber'] = 'OPU Number already exists.'
+            if edu_number:
+                qs = PiBaseRecord.objects.filter(edu_number=edu_number)
+                if instance:
+                    qs = qs.exclude(pk=instance.pk)
+                if qs.exists():
+                    errors['eduNumber'] = 'EDU Number already exists.'
+            if model_name:
+                qs = PiBaseRecord.objects.filter(model_name=model_name)
+                if instance:
+                    qs = qs.exclude(pk=instance.pk)
+                if qs.exists():
+                    errors['modelName'] = 'Model Name already exists.'
+            if errors:
+                raise serializers.ValidationError(errors)
+            return data
+        except Exception as e:
+            raise serializers.ValidationError(f"Validation error: {e}")
 
     def assign_json_fields(self, instance):
-        instance.impedance_selection = {
-            "impedance": self.initial_data.get("impedance"),
-            "customImpedance": self.initial_data.get("customImpedance")
-        }
-        instance.interfaces_details = {
-            "interfaces": self.initial_data.get("interfaces"),
-            "ports": self.initial_data.get("ports"),
-            "enclosureDetails": self.initial_data.get("enclosureDetails"),
-            "topcoverDetails": self.initial_data.get("topcoverDetails")
-        }
-        instance.case_style_data = {
-            "caseStyleType": self.initial_data.get("caseStyleType"),
-            "caseStyle": self.initial_data.get("caseStyle"),
-            "caseDimensions": self.initial_data.get("caseDimensions"),
-        }
+        """
+        Assigns JSON fields from initial data to the instance.
+        """
+        try:
+            instance.impedance_selection = {
+                "impedance": self.initial_data.get("impedance"),
+                "customImpedance": self.initial_data.get("customImpedance")
+            }
+            instance.interfaces_details = {
+                "interfaces": self.initial_data.get("interfaces"),
+                "ports": self.initial_data.get("ports"),
+                "enclosureDetails": self.initial_data.get("enclosureDetails"),
+                "topcoverDetails": self.initial_data.get("topcoverDetails")
+            }
+            instance.case_style_data = {
+                "caseStyleType": self.initial_data.get("caseStyleType"),
+                "caseStyle": self.initial_data.get("caseStyle"),
+                "caseDimensions": self.initial_data.get("caseDimensions"),
+            }
+        except Exception as e:
+            raise serializers.ValidationError(f"Error assigning JSON fields: {e}")
 
     def create(self, validated_data):
-        user = self.context['request'].user
-        components = validated_data.pop('components', [])
-        
-        # Pop write-only/non-model fields before model creation
-        validated_data.pop("impedance", None)
-        validated_data.pop("customImpedance", None)
-        validated_data.pop("interfaces", None)
-        validated_data.pop("caseStyleType", None)
-        validated_data.pop("caseStyle", None)
-        validated_data.pop("caseDimensions", None)
-        validated_data.pop("ports", None)
-        validated_data.pop("enclosureDetails", None)
-        validated_data.pop("topcoverDetails", None)
-
-        validated_data['created_by'] = user
-        validated_data['updated_by'] = user
-        validated_data['revision_number'] = "1"
-
-        instance = PiBaseRecord.objects.create(**validated_data)
-
-        # Now handle those popped fields into JSON fields
-        self.assign_json_fields(instance)
-
-        instance.save()
-
-        if components:
-            instance.components.set(components)
-
-        return instance
+        """
+        Creates a new PiBaseRecord instance, handling custom and JSON fields.
+        """
+        try:
+            user = self.context['request'].user
+            components = validated_data.pop('components', [])
+            validated_data.pop("impedance", None)
+            validated_data.pop("customImpedance", None)
+            validated_data.pop("interfaces", None)
+            validated_data.pop("caseStyleType", None)
+            validated_data.pop("caseStyle", None)
+            validated_data.pop("caseDimensions", None)
+            validated_data.pop("ports", None)
+            validated_data.pop("enclosureDetails", None)
+            validated_data.pop("topcoverDetails", None)
+            validated_data['created_by'] = user
+            validated_data['updated_by'] = user
+            validated_data['revision_number'] = "1"
+            instance = PiBaseRecord.objects.create(**validated_data)
+            self.assign_json_fields(instance)
+            instance.save()
+            if components:
+                instance.components.set(components)
+            return instance
+        except Exception as e:
+            raise serializers.ValidationError(f"Error creating PiBaseRecord: {e}")
 
     def update(self, instance, validated_data):
-        user = self.context['request'].user
-        components = validated_data.pop('components', None)
-
-        # Update simple fields from validated_data
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        # Assign JSON fields from the original request data (self.initial_data)
-        self.assign_json_fields(instance)
-
-        # Update the 'updated_by' and increment 'revision_number'
-        instance.updated_by = user
+        """
+        Updates an existing PiBaseRecord instance, handling custom and JSON fields.
+        """
         try:
-            instance.revision_number = str(int(instance.revision_number) + 1)
-        except (ValueError, TypeError):
-            instance.revision_number = "1"  # fallback if revision_number is invalid or None
+            user = self.context['request'].user
+            components = validated_data.pop('components', None)
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            self.assign_json_fields(instance)
+            instance.updated_by = user
+            try:
+                instance.revision_number = str(int(instance.revision_number) + 1)
+            except (ValueError, TypeError):
+                instance.revision_number = "1"
+            instance.save()
+            if components is not None:
+                instance.components.set(components)
+            return instance
+        except Exception as e:
+            raise serializers.ValidationError(f"Error updating PiBaseRecord: {e}")
 
-        instance.save()
-
-        # Update many-to-many relationship if components were passed
-        if components is not None:
-            instance.components.set(components)
-
-        return instance
-    
-    
