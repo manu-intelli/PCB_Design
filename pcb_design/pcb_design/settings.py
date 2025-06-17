@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'authentication',  # Custom authentication app
     'masters',  # Custom app for managing master data
     'pibase',  # Custom app for managing PiBase records
+    'pibase_makebill',  # Custom app for managing Make Bill records
 ]
 
 # Middleware configuration
