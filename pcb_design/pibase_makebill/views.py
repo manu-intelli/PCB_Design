@@ -14,8 +14,7 @@ import uuid
 
 from pibase.views import PiBaseRecordPagination
 from pibase.models import PiBaseRecord
-from .serializers import PiBaseToMakeBillRecordSerializer
-from pibase.serializers import PiBaseRecordGetSerializer
+from .serializers import PiBaseToMakeBillRecordSerializer,MakeBillRecordGetSerializer
 from authentication.custom_permissions import IsAuthorized
 from authentication.custom_authentication import CustomJWTAuthentication
 from . import make_bill_logs
@@ -76,7 +75,7 @@ class MakeBillRetrieveAPIView(generics.RetrieveAPIView):
     """
     API endpoint to retrieve a PiBaseRecord by UUID.
     """
-    serializer_class = PiBaseRecordGetSerializer
+    serializer_class = MakeBillRecordGetSerializer
     permission_classes = [IsAuthorized]
     authentication_classes = [CustomJWTAuthentication]
 
