@@ -215,20 +215,20 @@ class MakeBillCreateAPIView(APIView):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
-                "componuntsData": openapi.Schema(
+                "componentsData": openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_OBJECT),
                 ),
                 "pibaseId": openapi.Schema(type=openapi.TYPE_INTEGER),
                 # Add other fields as needed
             },
-            required=["componuntsData", "pibaseId"],
+            required=["componentsData", "pibaseId"],
         ),
         responses={201: MakeBillRecordSerializer()},
     )
     def post(self, request):
         data = request.data.copy()
-        components = data.get("componuntsData", [])
+        components = data.get("componentsData", [])
 
         # ✅ Set default status if not provided
         if "status" not in data or not data["status"]:
