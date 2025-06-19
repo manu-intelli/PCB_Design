@@ -56,13 +56,13 @@ COMPONENT_TO_FIELD_MAP = {
 
 class MakeBillRecordGetSerializer(serializers.Serializer):
     pibaseId = serializers.SerializerMethodField()
-    componuntsData = serializers.SerializerMethodField()
+    componentsData = serializers.SerializerMethodField()
     pibaseRecord = serializers.SerializerMethodField()
 
     def get_pibaseId(self, obj):
         return obj.id
 
-    def get_componuntsData(self, obj):
+    def get_componentsData(self, obj):
         components = obj.components.all() if hasattr(obj.components, "all") else obj.components or []
         selected_fields = [
             COMPONENT_TO_FIELD_MAP.get(comp.name) for comp in components
@@ -124,7 +124,7 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         return PiBaseRecordSerializer(obj).data
 
     def to_representation(self, instance):
-        componunts_data = self.get_componuntsData(instance)
+        componunts_data = self.get_componentsData(instance)
 
         # Append case style row manually if needed
         if instance.case_style_data:
@@ -147,7 +147,7 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
 
         return {
             "pibaseId": self.get_pibaseId(instance),
-            "componuntsData": componunts_data,
+            "componentsData": componunts_data,
             "recordId": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"PiBase-{instance.id}")),
             "created_by_name": instance.created_by.get_full_name() if instance.created_by else "",
             "created_at": instance.created_at.isoformat() if instance.created_at else None,
