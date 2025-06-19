@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'authentication',  # Custom authentication app
     'masters',  # Custom app for managing master data
     'pibase',  # Custom app for managing PiBase records
+    'pibase_makebill',  # Custom app for managing Make Bill records
 ]
 
 # Middleware configuration
@@ -160,4 +161,16 @@ APPEND_SLASH = False
 # Allow credentials in CORS requests
 CORS_ALLOW_CREDENTIALS = True
 
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': "JWT Authorization header using the Bearer scheme. Example: 'Bearer <token>'"
+        }
+    },
+    'USE_SESSION_AUTH': False,
+}
 
