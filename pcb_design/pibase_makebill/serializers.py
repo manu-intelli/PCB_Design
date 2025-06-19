@@ -253,11 +253,11 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
 
 class MakeBillRecordSerializer(serializers.ModelSerializer):
-    pk = serializers.SerializerMethodField()
+    record_id = serializers.SerializerMethodField()
 
     class Meta:
         model = MakeBillRecord
         fields = '__all__'
 
-    def get_pk(self, obj):
+    def get_record_id(self, obj):
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'MakeBill-{obj.id}'))
