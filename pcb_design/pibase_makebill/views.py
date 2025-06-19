@@ -161,15 +161,15 @@ class MakeBillGetAPIView(APIView):
         operation_description="Retrieve a MakeBillRecord by UUID.",
         responses={200: MakeBillRecordGetSerializer()},
     )
-    def get(self, request, pk):
+    def get(self, request, record_id):
         try:
             make_bill_logs.info(
-                f"Getting MakeBillRecord API called for: {pk} -- user: {request.user}"
+                f"Getting MakeBillRecord API called for: {record_id} -- user: {request.user}"
             )
 
             # Validate and parse UUID
             try:
-                uuid_obj = UUID(pk, version=5) if len(pk) == 36 else UUID(pk)
+                uuid_obj = UUID(record_id, version=5) if len(record_id) == 36 else UUID(record_id)
             except ValueError:
                 raise NotFound("Invalid UUID format.")
 
@@ -180,7 +180,7 @@ class MakeBillGetAPIView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except MakeBillRecord.DoesNotExist:
-            make_bill_logs.error(f"MakeBillRecord not found with UUID: {pk}")
+            make_bill_logs.error(f"MakeBillRecord not found with UUID: {record_id}")
             return Response(
                 {"error": "MakeBillRecord not found."}, status=status.HTTP_404_NOT_FOUND
             )
@@ -295,11 +295,11 @@ class MakeBillUpdateAPIView(APIView):
         ),
         responses={200: MakeBillRecordSerializer()},
     )
-    def patch(self, request, pk):
+    def patch(self, request, record_id):
         try:
             make_bill = None
             for record in MakeBillRecord.objects.all():
-                if str(uuid5(NAMESPACE_DNS, f"MakeBill-{record.id}")) == str(pk):
+                if str(uuid5(NAMESPACE_DNS, f"MakeBill-{record.id}")) == str(record_id):
                     make_bill = record
                     break
 
@@ -377,7 +377,7 @@ class MakeBillDeleteAPIView(APIView):
         operation_description="DELETE is not allowed for MakeBillRecord.",
         responses={405: "DELETE is not allowed"},
     )
-    def delete(self, request, pk):
+    def delete(self, request, record_id):
         return Response({"error": "DELETE is not allowed"}, status=405)
 
 
@@ -452,12 +452,12 @@ class MakeBillGetAPIView(APIView):
             )
         },
     )
-    def get(self, request, pk):
+    def get(self, request, record_id):
         try:
             # Reverse match MakeBill-{obj.id} using uuid5
             make_bill = None
             for record in MakeBillRecord.objects.all():
-                if str(uuid5(NAMESPACE_DNS, f"MakeBill-{record.id}")) == str(pk):
+                if str(uuid5(NAMESPACE_DNS, f"MakeBill-{record.id}")) == str(record_id):
                     make_bill = record
                     break
 
