@@ -22,7 +22,7 @@ from .models import MakeBillRecord
 from .serializers import MakeBillRecordSerializer
 
 from pibase.views import PiBaseRecordPagination
-from pibase.models import PiBaseRecord
+from pibase.models import PiBaseRecord,PiBaseStatus
 from .serializers import PiBaseToMakeBillRecordSerializer, MakeBillRecordGetSerializer
 from authentication.custom_permissions import IsAuthorized
 from authentication.custom_authentication import CustomJWTAuthentication
@@ -219,9 +219,10 @@ class MakeBillCreateAPIView(APIView):
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Items(type=openapi.TYPE_OBJECT),
                 ),
+                "pibaseId": openapi.Schema(type=openapi.TYPE_INTEGER),
                 # Add other fields as needed
             },
-            required=["componuntsData"],
+            required=["componuntsData", "pibaseId"],
         ),
         responses={201: MakeBillRecordSerializer()},
     )
@@ -241,7 +242,7 @@ class MakeBillCreateAPIView(APIView):
         if request.user and request.user.is_authenticated:
             data["created_by"] = request.user.id
 
-        # Component grouping
+        # ✅ Component grouping
         component_field_map = {
             "PCB Name": "pcb_details",
             "CAN Details": "can_details",
@@ -271,8 +272,21 @@ class MakeBillCreateAPIView(APIView):
 
         serializer = MakeBillRecordSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            makebill = serializer.save()
+
+            # ✅ Update status of related PiBaseRecord
+            pibase_id = data.get("pibaseId")
+            if pibase_id:
+                try:
+                    pibase_record = PiBaseRecord.objects.get(id=pibase_id)
+                    pibase_status = PiBaseStatus.objects.get(status_code=3)  # Or whatever field maps to status
+                    pibase_record.status = pibase_status
+                    pibase_record.save()
+                except (PiBaseRecord.DoesNotExist, PiBaseStatus.DoesNotExist):
+                    pass  # Optional: log or handle
+
             return Response(serializer.data, status=201)
+
         return Response(serializer.errors, status=400)
 
 
@@ -307,6 +321,13 @@ class MakeBillUpdateAPIView(APIView):
                 return Response(
                     {"error": "MakeBillRecord not found."},
                     status=status.HTTP_404_NOT_FOUND,
+                )
+            
+                    # ✅ Check if status is Pending (id == 1)
+            if make_bill.status.id != 1:
+                return Response(
+                    {"error": "This MakeBill record cannot be edited because its status is not 'Pending'."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             data = request.data.copy()
