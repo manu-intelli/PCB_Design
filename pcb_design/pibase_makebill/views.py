@@ -7,6 +7,7 @@ Includes Swagger documentation for all endpoints.
 """
 
 from rest_framework import generics, status, filters
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
@@ -194,17 +195,18 @@ class MakeBillGetAPIView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+class MakeBillListAPIView(ListAPIView):
+    queryset = MakeBillRecord.objects.all()
+    serializer_class = MakeBillRecordSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = MakeBillRecordPagination
 
-class MakeBillListAPIView(APIView):
     @swagger_auto_schema(
-        operation_description="List all MakeBillRecord entries.",
+        operation_description="List all MakeBillRecord entries with pagination.",
         responses={200: MakeBillRecordSerializer(many=True)},
     )
-    def get(self, request):
-        bills = MakeBillRecord.objects.all()
-        serializer = MakeBillRecordSerializer(bills, many=True)
-        return Response(serializer.data)
-
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
 # =====================
 # Create API

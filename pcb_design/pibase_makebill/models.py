@@ -53,7 +53,7 @@ class MakeBillRecord(models.Model):
     copper_flaps_details = models.JSONField(default=dict, blank=True, null=True)
     resonator_details = models.JSONField(default=dict, blank=True, null=True)
     ltcc_details = models.JSONField(default=dict, blank=True, null=True)
-    special_requirements = models.JSONField(default=dict, blank=True, null=True)
+    special_requirements = models.TextField(blank=True, null=True, verbose_name="Special Requirements")
 
     revision_number = models.CharField(max_length=20)
     pibaseRecord = models.JSONField(default=dict, blank=True, null=True)
