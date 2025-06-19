@@ -358,6 +358,9 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
         Updates an existing PiBaseRecord instance, handling custom and JSON fields.
         """
         try:
+             # Check if current instance status is 'Pending'
+            if instance.status.id != 1:
+                raise serializers.ValidationError("This record cannot be edited because it is not in 'Pending' status.")
             user = self.context['request'].user
             components = validated_data.pop('components', None)
             for attr, value in validated_data.items():
