@@ -56,6 +56,7 @@ class MakeBillRecord(models.Model):
     special_requirements = models.JSONField(default=dict, blank=True, null=True)
 
     revision_number = models.CharField(max_length=20)
+    pibaseRecord = models.JSONField(default=dict, blank=True, null=True)
 
     status = models.ForeignKey(
         MakeBillStatus,

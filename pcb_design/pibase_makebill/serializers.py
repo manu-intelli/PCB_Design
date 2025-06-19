@@ -2,6 +2,7 @@ import uuid
 from rest_framework import serializers
 from pibase.models import PiBaseRecord, PiBaseComponent
 from .models import MakeBillRecord, MakeBillStatus
+from pibase.serializers import PiBaseRecordSerializer
 
 
 class PiBaseToMakeBillRecordSerializer(serializers.ModelSerializer):
@@ -56,12 +57,13 @@ COMPONENT_TO_FIELD_MAP = {
 class MakeBillRecordGetSerializer(serializers.Serializer):
     pibaseId = serializers.SerializerMethodField()
     componuntsData = serializers.SerializerMethodField()
+    pibaseRecord = serializers.SerializerMethodField()
 
     def get_pibaseId(self, obj):
         return obj.id
 
     def get_componuntsData(self, obj):
-        components = obj.components.all() if hasattr(obj.components, "all") else obj.components
+        components = obj.components.all() if hasattr(obj.components, "all") else obj.components or []
         selected_fields = [
             COMPONENT_TO_FIELD_MAP.get(comp.name) for comp in components
             if COMPONENT_TO_FIELD_MAP.get(comp.name)
@@ -72,7 +74,6 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         case_style_data = obj.case_style_data or {}
         edu_number = obj.edu_number
         opu_number = obj.opu_number
-
         component_counters = {}
 
         for comp in components:
@@ -118,16 +119,20 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
 
         return combined_data
 
+    def get_pibaseRecord(self, obj):
+        # Use an existing serializer to serialize the full object
+        return PiBaseRecordSerializer(obj).data
+
     def to_representation(self, instance):
         componunts_data = self.get_componuntsData(instance)
 
-        # Append caseStyle as a new component row if available
-        case_style = "Case Style" if instance.case_style_data else None
-        if case_style:
-            new_row = {
+        # Append case style row manually if needed
+        if instance.case_style_data:
+            componunts_data.append({
                 "id": str(len(componunts_data) + 1),
                 "sNo": len(componunts_data) + 1,
-                "component": case_style,
+                "component": "Case Style",
+                "componentName": "Case Style",
                 "partNo": "",
                 "rev": "",
                 "partDescription": "",
@@ -138,8 +143,7 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
                 "qNo": "",
                 "comments": "",
                 "notes": "",
-            }
-            componunts_data.append(new_row)
+            })
 
         return {
             "pibaseId": self.get_pibaseId(instance),
@@ -149,14 +153,14 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
             "created_at": instance.created_at.isoformat() if instance.created_at else None,
             "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
             "model_name": instance.model_name,
-            "revision_number": instance.revision_number,
+            "revision_number": 1,
             "op_number": instance.op_number,
             "opu_number": instance.opu_number,
             "edu_number": instance.edu_number,
             "case_style_data": instance.case_style_data or {},
             "special_requirements": instance.special_requirements or {},
+            "pibaseRecord": self.get_pibaseRecord(instance)
         }
-
 
 
 def _make_component_row(item, s_no, component_name=None, case_style_data=None, edu_number=None, opu_number=None, component_counters=None):
