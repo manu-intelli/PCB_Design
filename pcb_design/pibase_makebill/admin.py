@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import MakeBillRecord, MakeBillStatus
+from import_export.admin import ImportExportModelAdmin
 
 @admin.register(MakeBillRecord)
 class MakeBillRecordAdmin(admin.ModelAdmin):
@@ -11,9 +12,9 @@ class MakeBillRecordAdmin(admin.ModelAdmin):
     search_fields = ('model_name', 'op_number', 'opu_number', 'edu_number')
 
 @admin.register(MakeBillStatus)
-class MakeBillStatusAdmin(admin.ModelAdmin):
+class MakeBillStatusAdmin(ImportExportModelAdmin):
     """
-    Admin configuration for MakeBillStatus model.
+    Admin configuration for MakeBillStatus model with import/export support.
     """
     list_display = ('status_code', 'description', 'created_at')
     list_filter = ('status_code',)
