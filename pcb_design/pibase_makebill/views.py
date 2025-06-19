@@ -167,6 +167,20 @@ class MakeBillGetAPIView(APIView):
             make_bill_logs.error(f"Exception occurred while retrieving MakeBillRecord: {e}")
             return Response({"error": f"Unexpected error: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class MakeBillListAPIView(APIView):
+    @swagger_auto_schema(
+        operation_description="List all MakeBillRecord entries.",
+        responses={200: MakeBillRecordSerializer(many=True)}
+    )
+    def get(self, request):
+        bills = MakeBillRecord.objects.all()
+        serializer = MakeBillRecordSerializer(bills, many=True)
+        return Response(serializer.data)
+
+# =====================
+# Create API
+# =====================
 class MakeBillCreateAPIView(APIView):
     @swagger_auto_schema(
         operation_description="Create a new MakeBillRecord from provided component data.",
@@ -187,7 +201,19 @@ class MakeBillCreateAPIView(APIView):
         data = request.data.copy()
         components = data.get("componuntsData", [])
 
-        # Mapping componentName → model field
+        # ✅ Set default status if not provided
+        if "status" not in data or not data["status"]:
+            data["status"] = 1
+
+        # ✅ Set default revision_number = 1 if not provided
+        if "revision_number" not in data or not data["revision_number"]:
+            data["revision_number"] = "1"
+
+        # ✅ Set created_by
+        if request.user and request.user.is_authenticated:
+            data["created_by"] = request.user.id
+
+        # Component grouping
         component_field_map = {
             "PCB Name": "pcb_details",
             "CAN Details": "can_details",
@@ -201,22 +227,19 @@ class MakeBillCreateAPIView(APIView):
             "Resonator Details": "resonator_details",
             "LTCC Details": "ltcc_details",
             "Chip Aircoil": "chip_aircoil_details",
-            "Case Style": "case_style_data",  # If needed
+            "Case Style": "case_style_data",
         }
 
-        # Group components
         grouped = defaultdict(list)
         for comp in components:
             name = comp.get("componentName", "Unknown")
             grouped[name].append(comp)
 
-        # Prepare the model data
         for component_name, field_name in component_field_map.items():
             if component_name in grouped:
                 data[field_name] = grouped[component_name]
 
-        # Optionally store all components in a generic field
-        data["components"] = grouped  # or remove this line if not needed
+        data["components"] = grouped
 
         serializer = MakeBillRecordSerializer(data=data)
         if serializer.is_valid():
@@ -225,23 +248,94 @@ class MakeBillCreateAPIView(APIView):
         return Response(serializer.errors, status=400)
 
 
-class MakeBillListAPIView(APIView):
-    @swagger_auto_schema(
-        operation_description="List all MakeBillRecord entries.",
-        responses={200: MakeBillRecordSerializer(many=True)}
-    )
-    def get(self, request):
-        bills = MakeBillRecord.objects.all()
-        serializer = MakeBillRecordSerializer(bills, many=True)
-        return Response(serializer.data)
-
+# =====================
+# Update API
+# =====================
 class MakeBillUpdateAPIView(APIView):
     @swagger_auto_schema(
-        operation_description="PATCH is not allowed for MakeBillRecord.",
-        responses={405: "PATCH is not allowed"}
+        operation_description="Update an existing MakeBillRecord with partial data, especially components.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "componentsData": openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Items(type=openapi.TYPE_OBJECT)
+                ),
+                # Add more fields if needed
+            },
+            required=["componentsData"]
+        ),
+        responses={200: MakeBillRecordSerializer()}
     )
     def patch(self, request, pk):
-        return Response({"error": "PATCH is not allowed"}, status=405)
+        try:
+            make_bill = None
+            for record in MakeBillRecord.objects.all():
+                if str(uuid5(NAMESPACE_DNS, f'MakeBill-{record.id}')) == str(pk):
+                    make_bill = record
+                    break
+
+            if not make_bill:
+                return Response({"error": "MakeBillRecord not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            data = request.data.copy()
+            components = data.get("componentsData", [])
+
+            # ✅ Set default status if not provided
+            if "status" not in data or not data["status"]:
+                data["status"] = 1
+
+            # ✅ Auto-increment revision number
+            current_rev = make_bill.revision_number
+            try:
+                new_rev = str(int(current_rev) + 1)
+                data["revision_number"] = new_rev
+            except (ValueError, TypeError):
+                data["revision_number"] = "1"  # fallback
+
+            # ✅ Set updated_by
+            if request.user and request.user.is_authenticated:
+                data["updated_by"] = request.user.id
+
+            # Component grouping
+            component_field_map = {
+                "PCB Name": "pcb_details",
+                "CAN Details": "can_details",
+                "Chip Capacitors": "chip_capacitor_details",
+                "Chip Inductors": "chip_inductor_details",
+                "Chip Resistors": "chip_resistor_details",
+                "Transformer": "transformer_details",
+                "Shield": "shield_details",
+                "Finger": "finger_details",
+                "Copper Flap Details": "copper_flaps_details",
+                "Resonator Details": "resonator_details",
+                "LTCC Details": "ltcc_details",
+                "Chip Aircoil": "chip_aircoil_details",
+                "Case Style": "case_style_data",
+            }
+
+            grouped = defaultdict(list)
+            for comp in components:
+                name = comp.get("componentName", "Unknown")
+                grouped[name].append(comp)
+
+            for component_name, field_name in component_field_map.items():
+                if component_name in grouped:
+                    data[field_name] = grouped[component_name]
+
+            if "componentsData" in data:
+                del data["componentsData"]
+
+            data["components"] = grouped
+
+            serializer = MakeBillRecordSerializer(make_bill, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=200)
+            return Response(serializer.errors, status=400)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 from uuid import uuid5, NAMESPACE_DNS
 

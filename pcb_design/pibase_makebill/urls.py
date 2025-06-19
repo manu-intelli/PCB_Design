@@ -23,6 +23,6 @@ urlpatterns = [
     path("", MakeBillListAPIView.as_view(), name="makebill-list"),
     path("create/", MakeBillCreateAPIView.as_view(), name="makebill-create"),
     path("<uuid:pk>/", MakeBillGetAPIView.as_view(), name="makebill-detail"),  # Fetch a single makebill by id
-    path("<int:pk>/update/", MakeBillUpdateAPIView.as_view(), name="makebill-update"),
+    path("<uuid:pk>/update/", MakeBillUpdateAPIView.as_view(), name="makebill-update"),
     path("<int:pk>/delete/", MakeBillDeleteAPIView.as_view(), name="makebill-delete"),
 ]
