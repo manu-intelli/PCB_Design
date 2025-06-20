@@ -3,7 +3,7 @@ from rest_framework import serializers
 from pibase.models import PiBaseRecord, PiBaseComponent
 from .models import MakeBillRecord, MakeBillStatus
 from pibase.serializers import PiBaseRecordSerializer
-
+from collections import defaultdict
 
 class PiBaseToMakeBillRecordSerializer(serializers.ModelSerializer):
     """
@@ -54,6 +54,7 @@ COMPONENT_TO_FIELD_MAP = {
 }
 
 
+
 class MakeBillRecordGetSerializer(serializers.Serializer):
     pibaseId = serializers.SerializerMethodField()
     componentsData = serializers.SerializerMethodField()
@@ -74,7 +75,9 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         case_style_data = obj.case_style_data or {}
         edu_number = obj.edu_number
         opu_number = obj.opu_number
-        component_counters = {}
+
+        # ✅ Count only missing part numbers for counter
+        component_counters = defaultdict(int)
 
         for comp in components:
             field = COMPONENT_TO_FIELD_MAP.get(comp.name)
@@ -85,67 +88,85 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
             if not details:
                 continue
 
-            if isinstance(details, dict):
+            flat_items = []
+
+            if isinstance(details, list):
+                flat_items.extend(details)
+            elif isinstance(details, dict):
                 for v in details.values():
                     if isinstance(v, list):
-                        for item in v:
-                            combined_data.append(
-                                _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                            )
-                            s_no += 1
+                        flat_items.extend(v)
                     elif isinstance(v, dict):
-                        combined_data.append(
-                            _make_component_row(v, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                        )
-                        s_no += 1
+                        flat_items.append(v)
                 if not any(isinstance(v, (list, dict)) for v in details.values()):
-                    combined_data.append(
-                        _make_component_row(details, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                    )
-                    s_no += 1
+                    flat_items.append(details)
 
-            elif isinstance(details, list):
-                for item in details:
-                    combined_data.append(
-                        _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                    )
-                    s_no += 1
+            for item in flat_items:
+                if not item.get("bPartNumber", "").strip():
+                    component_counters[comp.name] += 1
 
+        # ✅ Build final rows
+        current_counters = defaultdict(int)
+        for comp in components:
+            field = COMPONENT_TO_FIELD_MAP.get(comp.name)
+            if not field:
+                continue
+
+            details = getattr(obj, field, None)
+            if not details:
+                continue
+
+            flat_items = []
+
+            if isinstance(details, list):
+                flat_items.extend(details)
             elif isinstance(details, dict):
+                for v in details.values():
+                    if isinstance(v, list):
+                        flat_items.extend(v)
+                    elif isinstance(v, dict):
+                        flat_items.append(v)
+                if not any(isinstance(v, (list, dict)) for v in details.values()):
+                    flat_items.append(details)
+
+            for item in flat_items:
+                # Only increment and assign counter if part number is missing
+                counter_str = ""
+                if not item.get("bPartNumber", "").strip():
+                    current_counters[comp.name] += 1
+                    counter_str = str(current_counters[comp.name]).zfill(2)
+
                 combined_data.append(
-                    _make_component_row(details, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
+                    _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, counter_str)
                 )
                 s_no += 1
 
         return combined_data
 
     def get_pibaseRecord(self, obj):
-        # Use an existing serializer to serialize the full object
         return PiBaseRecordSerializer(obj).data
 
     def to_representation(self, instance):
         components_data = self.get_componentsData(instance)
 
-        # Append case style row manually if needed
         if instance.case_style_data:
             components_data.append({
                 "id": str(len(components_data) + 1),
                 "sNo": len(components_data) + 1,
                 "component": "Case Style",
                 "componentName": "Case Style",
-                "partNo": "",
-                "rev": "",
-                "partDescription": "",
-                "qtyPerUnit": "",
-                "stdPkgQty": "",
-                "qtyRequired": "",
+                "partNo": "------",
+                "rev": "------",
+                "partDescription": "-------",
+                "qtyPerUnit": "0",
+                "stdPkgQty": "0",
+                "qtyRequired": "0",
                 "issuedQty": "",
                 "qNo": "",
-                "comments": "",
+                "comments": "Leave your comment",
                 "notes": "",
             })
 
-        # Add Special Requirements
         if instance.special_requirements:
             sr_text = instance.special_requirements if isinstance(instance.special_requirements, str) else str(instance.special_requirements)
             components_data.append({
@@ -153,15 +174,15 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
                 "sNo": len(components_data) + 1,
                 "component": "Special Requirements",
                 "componentName": "Special Requirements",
-                "partNo": "",
-                "rev": "",
+                "partNo": "0",
+                "rev": "------",
                 "partDescription": sr_text,
-                "qtyPerUnit": "",
-                "stdPkgQty": "",
-                "qtyRequired": "",
+                "qtyPerUnit": "0",
+                "stdPkgQty": "0",
+                "qtyRequired": "0",
                 "issuedQty": "",
                 "qNo": "",
-                "comments": "",
+                "comments": "Leave your comment",
                 "notes": "",
             })
 
@@ -181,36 +202,33 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         }
 
 
-def _make_component_row(item, s_no, component_name=None, case_style_data=None, edu_number=None, opu_number=None, component_counters=None):
+def _make_component_row(item, s_no, component_name=None, case_style_data=None, edu_number=None, opu_number=None, counter_str=""):
     part_no = item.get("bPartNumber", "").strip()
     part_description = ""
-    comments = "Use as is from PiBase"
+    comments = "-"
     notes = ""
 
-    if component_name not in component_counters:
-        component_counters[component_name] = 1
-    else:
-        component_counters[component_name] += 1
+        # ✅ If part number is present
+    if part_no:
+        part_description = "Already existing in ERP"
 
-    counter_str = str(component_counters[component_name]).zfill(2)
-
-    if not part_no:
+    if not part_no and counter_str:  # Only generate if not present
         if component_name == "PCB Name":
             part_no = f"B14-NEW-{counter_str}+"
             part_description = (
-                f"For Base PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x substrate thickness\n"
-                f"For Coupling PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x substrate thickness\n"
-                f"For Multilayer PCB\nMULTILAYER PCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x overall thickness"
+                f"For Base PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '0')} x "
+                f"{case_style_data.get('caseDimensions', {}).get('width', '0')} x substrate thickness\n"
+                f"For Coupling PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '0')} x "
+                f"{case_style_data.get('caseDimensions', {}).get('width', '0')} x substrate thickness\n"
+                f"For Multilayer PCB\nMULTILAYER PCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '0')} x "
+                f"{case_style_data.get('caseDimensions', {}).get('width', '0')} x overall thickness"
             )
 
         elif component_name == "CAN Details":
             part_no = f"B11-NEW-{counter_str}+"
             part_description = (
-                "If Material is metal:\nMETAL CAN LxWxH\n"
-                "If Material is plastic:\nPLASTIC CAN LxWxH"
+                "If Material is metal:\nMETAL CAN L x W x H\n"
+                "If Material is plastic:\nPLASTIC CAN L x W x H "
             )
             comments = "ONLY FOR TYPE CLOSED\nUse as is from PiBase"
 
@@ -251,6 +269,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
         elif component_name == "Finger Details":
             part_no = f"B85-{edu_number or 'XXX'}{opu_number or 'YYYY'}-01+"
             comments = "? How does the tool know which number to be picked?"
+
     name_value = item.get("name", "")
     return {
         "id": str(s_no),
@@ -258,16 +277,17 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
         "componentName": component_name,
         "component": name_value or component_name,
         "partNo": part_no,
-        "rev": item.get("rev", ""),
-        "partDescription": part_description or item.get("partDescription", ""),
-        "qtyPerUnit": item.get("qtyPerUnit", ""),
-        "stdPkgQty": item.get("stdPkgQty", ""),
-        "qtyRequired": item.get("qtyRequired", ""),
+        "rev": item.get("rev", "") or "------",
+        "partDescription": item.get("partDescription", "") or part_description ,
+        "qtyPerUnit": item.get("qtyPerUnit", "") or 1,
+        "stdPkgQty": item.get("stdPkgQty", "") or 1,
+        "qtyRequired": item.get("qtyRequired", "") or 1,
         "issuedQty": item.get("issuedQty", ""),
         "qNo": "",
-        "comments": "",
+        "comments": comments,
         "notes": notes,
     }
+
 
 
 class MakeBillRecordSerializer(serializers.ModelSerializer):
