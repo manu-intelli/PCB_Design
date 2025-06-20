@@ -425,10 +425,10 @@ class MakeBillDeleteAPIView(APIView):
 class MakeBillGetAPIView(APIView):
     """
     Retrieve a MakeBillRecord by custom UUID (based on MakeBill-{id})
-    and return dynamic componentsData including 'others'.
+    and return dynamic componentsData including 'others' and case style.
     """
 
-    serializer_class = None  # You can assign MakeBillRecordSerializer if needed
+    serializer_class = None  # Optional
     permission_classes = [IsAuthenticated]
     authentication_classes = [CustomJWTAuthentication]
 
@@ -511,9 +511,9 @@ class MakeBillGetAPIView(APIView):
             )
 
         components_data = []
-        s_no = 1
+        auto_sno = 1
 
-        # ✅ Load known mapped fields
+        # Handle known fields
         for field in self.COMPONENT_FIELDS:
             details = getattr(make_bill, field, None)
             if not details:
@@ -521,29 +521,31 @@ class MakeBillGetAPIView(APIView):
 
             if isinstance(details, list):
                 for item in details:
+                    s_no = item.get("sNo") or auto_sno
                     components_data.append(self._make_component_row(item, s_no, field))
-                    s_no += 1
+                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+
             elif isinstance(details, dict):
                 if any(isinstance(v, list) for v in details.values()):
                     for v in details.values():
                         if isinstance(v, list):
                             for item in v:
-                                components_data.append(
-                                    self._make_component_row(item, s_no, field)
-                                )
-                                s_no += 1
+                                s_no = item.get("sNo") or auto_sno
+                                components_data.append(self._make_component_row(item, s_no, field))
+                                auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
                 else:
-                    components_data.append(
-                        self._make_component_row(details, s_no, field)
-                    )
-                    s_no += 1
+                    s_no = details.get("sNo") or auto_sno
+                    components_data.append(self._make_component_row(details, s_no, field))
+                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
 
-        # ✅ Include unmapped components from 'others'
+        # Handle 'others' field
         others = getattr(make_bill, "others", [])
         if isinstance(others, list):
             for item in others:
+                s_no = item.get("sNo") or auto_sno
                 components_data.append(self._make_component_row(item, s_no, "others"))
-                s_no += 1
+                auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+
 
         response_data = {
             "pibaseId": str(make_bill.id),
