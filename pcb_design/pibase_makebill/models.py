@@ -40,7 +40,6 @@ class MakeBillRecord(models.Model):
     components = models.JSONField(default=dict, blank=True, null=True)
 
     # Copy JSON fields from PiBaseRecord
-    case_style_data = models.JSONField(default=dict, blank=True, null=True, verbose_name="Case Style Data")
     can_details = models.JSONField(default=dict, blank=True, null=True)
     pcb_details = models.JSONField(default=dict, blank=True, null=True)
     chip_aircoil_details = models.JSONField(default=dict, blank=True, null=True)
@@ -53,7 +52,7 @@ class MakeBillRecord(models.Model):
     copper_flaps_details = models.JSONField(default=dict, blank=True, null=True)
     resonator_details = models.JSONField(default=dict, blank=True, null=True)
     ltcc_details = models.JSONField(default=dict, blank=True, null=True)
-    special_requirements = models.TextField(blank=True, null=True, verbose_name="Special Requirements")
+    others = models.JSONField(default=dict, blank=True, null=True)
 
     revision_number = models.CharField(max_length=20)
     pibaseRecord = models.JSONField(default=dict, blank=True, null=True)
