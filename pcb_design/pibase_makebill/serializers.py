@@ -124,13 +124,13 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         return PiBaseRecordSerializer(obj).data
 
     def to_representation(self, instance):
-        componunts_data = self.get_componentsData(instance)
+        components_data = self.get_componentsData(instance)
 
         # Append case style row manually if needed
         if instance.case_style_data:
-            componunts_data.append({
-                "id": str(len(componunts_data) + 1),
-                "sNo": len(componunts_data) + 1,
+            components_data.append({
+                "id": str(len(components_data) + 1),
+                "sNo": len(components_data) + 1,
                 "component": "Case Style",
                 "componentName": "Case Style",
                 "partNo": "",
@@ -145,20 +145,38 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
                 "notes": "",
             })
 
+        # Add Special Requirements
+        if instance.special_requirements:
+            sr_text = instance.special_requirements if isinstance(instance.special_requirements, str) else str(instance.special_requirements)
+            components_data.append({
+                "id": str(len(components_data) + 1),
+                "sNo": len(components_data) + 1,
+                "component": "Special Requirements",
+                "componentName": "Special Requirements",
+                "partNo": "",
+                "rev": "",
+                "partDescription": sr_text,
+                "qtyPerUnit": "",
+                "stdPkgQty": "",
+                "qtyRequired": "",
+                "issuedQty": "",
+                "qNo": "",
+                "comments": "",
+                "notes": "",
+            })
+
         return {
             "pibaseId": self.get_pibaseId(instance),
-            "componentsData": componunts_data,
             "recordId": str(uuid.uuid5(uuid.NAMESPACE_DNS, f"PiBase-{instance.id}")),
-            "created_by_name": instance.created_by.get_full_name() if instance.created_by else "",
-            "created_at": instance.created_at.isoformat() if instance.created_at else None,
-            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
             "model_name": instance.model_name,
-            "revision_number": 1,
             "op_number": instance.op_number,
             "opu_number": instance.opu_number,
             "edu_number": instance.edu_number,
-            "case_style_data": instance.case_style_data or {},
-            "special_requirements": instance.special_requirements or {},
+            "revision_number": 1,
+            "created_by_name": instance.created_by.get_full_name() if instance.created_by else "",
+            "created_at": instance.created_at.isoformat() if instance.created_at else None,
+            "updated_at": instance.updated_at.isoformat() if instance.updated_at else None,
+            "componentsData": components_data,
             "pibaseRecord": self.get_pibaseRecord(instance)
         }
 
@@ -253,6 +271,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
 class MakeBillRecordSerializer(serializers.ModelSerializer):
     record_id = serializers.SerializerMethodField()
+    special_requirements = serializers.JSONField(required=False)
 
     class Meta:
         model = MakeBillRecord

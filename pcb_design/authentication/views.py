@@ -1,3 +1,5 @@
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9,6 +11,7 @@ from .custom_permissions import IsAuthorized
 from .serializers import RegisterSerializer,RoleSerializer
 from .services import reset_user_password, get_users, update_user, delete_user
 from . import authentication_logs
+
 
 class UserRegistrationView(APIView):
     permission_classes = [IsAuthorized]
@@ -28,6 +31,35 @@ class UserRegistrationView(APIView):
 class LoginView(APIView):
     permission_classes = [] 
     authentication_classes = [] 
+
+    @swagger_auto_schema(
+        operation_description="User login with email and password",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['email', 'password'],
+            properties={
+                'email': openapi.Schema(type=openapi.TYPE_STRING, format='email', example="user@example.com"),
+                'password': openapi.Schema(type=openapi.TYPE_STRING, format='password', example="securepassword123")
+            },
+        ),
+        responses={
+            200: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'refresh': openapi.Schema(type=openapi.TYPE_STRING, description="Refresh token"),
+                    'access': openapi.Schema(type=openapi.TYPE_STRING, description="Access token"),
+                    'role': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING), description="List of user roles"),
+                    'full_name': openapi.Schema(type=openapi.TYPE_STRING, description="Full name of the user"),
+                }
+            ),
+            401: openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'error': openapi.Schema(type=openapi.TYPE_STRING, example="Invalid credentials"),
+                }
+            )
+        }
+    )
 
     def post(self, request):        
         email = request.data.get('email')
