@@ -177,7 +177,7 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
                 "sNo": len(components_data) + 1,
                 "component": "Special Requirements",
                 "componentName": "Special Requirements",
-                "partNo": "0",
+                "partNo": "------",
                 "rev": "------",
                 "partDescription": sr_text,
                 "qtyPerUnit": "0",
