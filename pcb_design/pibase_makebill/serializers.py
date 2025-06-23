@@ -3,7 +3,7 @@ from rest_framework import serializers
 from pibase.models import PiBaseRecord, PiBaseComponent
 from .models import MakeBillRecord, MakeBillStatus
 from pibase.serializers import PiBaseRecordSerializer
-
+from collections import defaultdict
 
 class PiBaseToMakeBillRecordSerializer(serializers.ModelSerializer):
     """
@@ -54,6 +54,7 @@ COMPONENT_TO_FIELD_MAP = {
 }
 
 
+
 class MakeBillRecordGetSerializer(serializers.Serializer):
     pibaseId = serializers.SerializerMethodField()
     componentsData = serializers.SerializerMethodField()
@@ -74,7 +75,9 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         case_style_data = obj.case_style_data or {}
         edu_number = obj.edu_number
         opu_number = obj.opu_number
-        component_counters = {}
+
+        # ✅ Count only missing part numbers for counter
+        component_counters = defaultdict(int)
 
         for comp in components:
             field = COMPONENT_TO_FIELD_MAP.get(comp.name)
@@ -85,67 +88,88 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
             if not details:
                 continue
 
-            if isinstance(details, dict):
+            flat_items = []
+
+            if isinstance(details, list):
+                flat_items.extend(details)
+            elif isinstance(details, dict):
                 for v in details.values():
                     if isinstance(v, list):
-                        for item in v:
-                            combined_data.append(
-                                _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                            )
-                            s_no += 1
+                        flat_items.extend(v)
                     elif isinstance(v, dict):
-                        combined_data.append(
-                            _make_component_row(v, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                        )
-                        s_no += 1
+                        flat_items.append(v)
                 if not any(isinstance(v, (list, dict)) for v in details.values()):
-                    combined_data.append(
-                        _make_component_row(details, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                    )
-                    s_no += 1
+                    flat_items.append(details)
 
-            elif isinstance(details, list):
-                for item in details:
-                    combined_data.append(
-                        _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
-                    )
-                    s_no += 1
+            for item in flat_items:
+                if not item.get("bPartNumber", "").strip():
+                    component_counters[comp.name] += 1
 
+        # ✅ Build final rows
+        current_counters = defaultdict(int)
+        for comp in components:
+            field = COMPONENT_TO_FIELD_MAP.get(comp.name)
+            if not field:
+                continue
+
+            details = getattr(obj, field, None)
+            if not details:
+                continue
+
+            flat_items = []
+
+            if isinstance(details, list):
+                flat_items.extend(details)
             elif isinstance(details, dict):
+                for v in details.values():
+                    if isinstance(v, list):
+                        flat_items.extend(v)
+                    elif isinstance(v, dict):
+                        flat_items.append(v)
+                if not any(isinstance(v, (list, dict)) for v in details.values()):
+                    flat_items.append(details)
+
+            for item in flat_items:
+                # Only increment and assign counter if part number is missing
+                counter_str = ""
+                b_part_number = item.get("bPartNumber", "").strip().upper()
+                part_type = item.get("partType", "").strip()
+
+                if b_part_number in ["", "TBD"] or part_type == "New":
+                    current_counters[comp.name] += 1
+                    counter_str = str(current_counters[comp.name]).zfill(2)
                 combined_data.append(
-                    _make_component_row(details, s_no, comp.name, case_style_data, edu_number, opu_number, component_counters)
+                    _make_component_row(item, s_no, comp.name, case_style_data, edu_number, opu_number, counter_str)
                 )
                 s_no += 1
 
         return combined_data
 
     def get_pibaseRecord(self, obj):
-        # Use an existing serializer to serialize the full object
         return PiBaseRecordSerializer(obj).data
 
     def to_representation(self, instance):
         components_data = self.get_componentsData(instance)
 
-        # Append case style row manually if needed
         if instance.case_style_data:
+            edu_code = instance.edu_number or "XXXX"
             components_data.append({
                 "id": str(len(components_data) + 1),
                 "sNo": len(components_data) + 1,
                 "component": "Case Style",
                 "componentName": "Case Style",
-                "partNo": "",
-                "rev": "",
-                "partDescription": "",
-                "qtyPerUnit": "",
-                "stdPkgQty": "",
-                "qtyRequired": "",
+                "partNo": f"99-01-EDU{edu_code}",
+                "rev": "------",
+                "partDescription": "-------",
+                "qtyPerUnit": "0",
+                "stdPkgQty": "0",
+                "qtyRequired": "0",
                 "issuedQty": "",
                 "qNo": "",
-                "comments": "",
+                "comments": "Leave your comment",
                 "notes": "",
             })
 
-        # Add Special Requirements
         if instance.special_requirements:
             sr_text = instance.special_requirements if isinstance(instance.special_requirements, str) else str(instance.special_requirements)
             components_data.append({
@@ -153,15 +177,15 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
                 "sNo": len(components_data) + 1,
                 "component": "Special Requirements",
                 "componentName": "Special Requirements",
-                "partNo": "",
-                "rev": "",
+                "partNo": "------",
+                "rev": "------",
                 "partDescription": sr_text,
-                "qtyPerUnit": "",
-                "stdPkgQty": "",
-                "qtyRequired": "",
+                "qtyPerUnit": "0",
+                "stdPkgQty": "0",
+                "qtyRequired": "0",
                 "issuedQty": "",
                 "qNo": "",
-                "comments": "",
+                "comments": "Leave your comment",
                 "notes": "",
             })
 
@@ -181,76 +205,257 @@ class MakeBillRecordGetSerializer(serializers.Serializer):
         }
 
 
-def _make_component_row(item, s_no, component_name=None, case_style_data=None, edu_number=None, opu_number=None, component_counters=None):
+def _make_component_row(item, s_no, component_name=None, case_style_data=None, edu_number=None, opu_number=None, counter_str=""):
     part_no = item.get("bPartNumber", "").strip()
     part_description = ""
-    comments = "Use as is from PiBase"
+    comments = item.get("comments", "-")
     notes = ""
 
-    if component_name not in component_counters:
-        component_counters[component_name] = 1
-    else:
-        component_counters[component_name] += 1
+        # ✅ If part number is present
+    if part_no:
+        part_description = "Already existing in ERP"
 
-    counter_str = str(component_counters[component_name]).zfill(2)
+    if (not part_no or part_no.strip().upper() == "TBD") and counter_str:  # Only generate if not present
 
-    if not part_no:
         if component_name == "PCB Name":
             part_no = f"B14-NEW-{counter_str}+"
-            part_description = (
-                f"For Base PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x substrate thickness\n"
-                f"For Coupling PCB\nPCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x substrate thickness\n"
-                f"For Multilayer PCB\nMULTILAYER PCB FR4 {case_style_data.get('caseDimensions', {}).get('length', '')} x "
-                f"{case_style_data.get('caseDimensions', {}).get('width', '')} x overall thickness"
-            )
+            length = case_style_data.get('caseDimensions', {}).get('length')
+            width = case_style_data.get('caseDimensions', {}).get('width')
 
+            # ✅ If length or width is missing, default to 'L' or 'W'
+            length = length if length else 'L'
+            width = width if width else 'W'
+
+            if item.get("name") == "Base PCB":
+                part_description = (
+                    f"For Base PCB\n FR4 {length} x {width} x substrate thickness\n"
+                )
+
+            elif item.get("name") == "Coupling PCB":
+                part_description = (
+                    f"For Coupling PCB\ FR4 {length} x {width} x substrate thickness\n"
+                )
+
+            elif item.get("name") == "Other PCB":
+                part_description = (
+                    f"For Other PCB\n FR4 {length} x {width} x substrate thickness\n"
+                )
+
+            else:
+                part_description = (
+                    f"For PCB\n FR4 {length} x {width} x substrate thickness\n"
+                )
+
+        
         elif component_name == "CAN Details":
             part_no = f"B11-NEW-{counter_str}+"
-            part_description = (
-                "If Material is metal:\nMETAL CAN LxWxH\n"
-                "If Material is plastic:\nPLASTIC CAN LxWxH"
-            )
-            comments = "ONLY FOR TYPE CLOSED\nUse as is from PiBase"
+
+            can_material = item.get("canMaterial", "").strip().lower()
+            custom_can_material = item.get("customCanMaterial", "").strip()
+
+            if can_material == "metal":
+                part_description = "METAL CAN L x W x H "
+
+            elif can_material == "plastic":
+                part_description = "PLASTIC CAN L x W x H "
+
+            elif can_material == "ceramic":
+                part_description = "CERAMIC CAN L x W x H "
+
+            elif can_material == "others" and custom_can_material:
+                part_description = f"{custom_can_material.capitalize()} CAN L x W x H "
+
+            else:
+                part_description = "CAN L x W x H "
+
+            comments = "Only for type closed"
 
         elif component_name == "Chip Capacitors":
             part_no = f"B55-NEW-{counter_str}+"
-            part_description = "Supplier name, Supplier B-P/N"
+            supplier_name = item.get('supplierName', '').strip()
+            supplier_number = item.get('supplierNumber', '').strip()
+
+            part_description = f"Supplier: {supplier_name} | B-P/N: {supplier_number}" if supplier_name or supplier_number else "Supplier name, Supplier B-P/N"
 
         elif component_name == "Chip Inductors":
             part_no = f"B65-NEW-{counter_str}+"
-            part_description = "Supplier name, Supplier B-P/N"
+            supplier_name = item.get('supplierName', '').strip()
+            supplier_number = item.get('supplierNumber', '').strip()
+
+            part_description = f"Supplier: {supplier_name} | B-P/N: {supplier_number}" if supplier_name or supplier_number else "Supplier name, Supplier B-P/N"
 
         elif component_name == "Chip Resistor":
             part_no = f"B50-NEW-{counter_str}+"
-            part_description = "Supplier name, Supplier B-P/N"
+            supplier_name = item.get('supplierName', '').strip()
+            supplier_number = item.get('supplierNumber', '').strip()
+
+            part_description = f"Supplier: {supplier_name} | B-P/N: {supplier_number}" if supplier_name or supplier_number else "Supplier name, Supplier B-P/N"
+
 
         elif component_name == "Transformer":
-            core_code = item.get("core", "HAA")
+            core_bpns = item.get("coreBPN", [])
             edu_code = edu_number or opu_number or "XXXX"
-            part_no = f"B64-{core_code}EDU{edu_code}-{counter_str}+"
-            part_description = (
-                "Core (B60), wire gauge, number of turns\n"
-                "E.g., XFMR 1#34 RD 5.5T P2 RoHS"
-            )
 
-        elif component_name == "Chip Resonator":
-            part_no = f"B51-15-09-{edu_number or '2345'}-1+"
-            part_description = "RESONATOR WITH SOLDERED TAB"
+            # ✅ Handle single or multiple cores
+            if len(core_bpns) == 1:
+                core_code = core_bpns[0]
+            elif len(core_bpns) >= 2:
+                core_code = ''.join(core_bpns)  # Concatenate both core numbers
+            else:
+                core_code = "HAA"  # Default if coreBPN not present
+
+            part_no = f"B64-{core_code}EDU{edu_code}-{counter_str}+"
+
+            core_type = item.get("coreType", "single").lower()
+            wire_type = item.get("wireType", "single").lower()
+            orientation = item.get("orientation", "P0")
+            wire_configs = item.get("wireGaugeConfig", [])
+            number_of_wires = item.get("numberOfWires", 1)
+
+            xfmr_prefix = "XFMR"
+            rohs = "RoHS"
+
+            # Case 1: Single Core, Single Wire
+            if core_type == "single" and wire_type == "single" and len(wire_configs) == 1:
+                wire_gauge = wire_configs[0].get("gauge", "")
+                turns = wire_configs[0].get("turns", 0)
+                turns = f"{turns + 0.5}T"
+                part_description = f"{xfmr_prefix} 1#{wire_gauge} RD {turns} {orientation} {rohs}"
+
+            # Case 2: Single Core, Two Single Wires
+            elif core_type == "single" and wire_type == "single" and len(wire_configs) == 2:
+                wire_gauge_1 = wire_configs[0].get("gauge", "")
+                turns_1 = f"{wire_configs[0].get('turns', 0) + 0.5}T"
+
+                wire_gauge_2 = wire_configs[1].get("gauge", "")
+                turns_2 = f"{wire_configs[1].get('turns', 0) + 0.5}T"
+
+                part_description = (
+                    f"{xfmr_prefix} 1#{wire_gauge_1} GR {turns_1} + 1#{wire_gauge_2} GD {turns_2} {orientation} {rohs}"
+                )
+
+            # Case 3: Single Core, Twisted Wire
+            elif core_type == "single" and wire_type == "twisted":
+                wire_gauge = wire_configs[0].get("gauge", "")
+                turns = f"{wire_configs[0].get('turns', 0) + 0.5}T"
+                part_description = f"{xfmr_prefix} {number_of_wires}#{wire_gauge} RDGR {turns} {orientation} {rohs}"
+
+            # Case 4: Double Core, Single Wire
+            elif core_type == "double" and wire_type == "single" and len(wire_configs) == 1:
+                wire_gauge = wire_configs[0].get("gauge", "")
+                turns = f"{wire_configs[0].get('turns', 0) + 0.5}T"
+                part_description = f"{xfmr_prefix} 2 CORES 1#{wire_gauge} RD {turns} {orientation} {rohs}"
+
+            # Case 5: Double Core, Two Single Wires
+            elif core_type == "double" and wire_type == "double" and len(wire_configs) == 2:
+                wire_gauge_1 = wire_configs[0].get("gauge", "")
+                turns_1 = f"{wire_configs[0].get('turns', 0) + 0.5}T"
+
+                wire_gauge_2 = wire_configs[1].get("gauge", "")
+                turns_2 = f"{wire_configs[1].get('turns', 0) + 0.5}T"
+
+                part_description = (
+                    f"{xfmr_prefix} 2 CORES 1#{wire_gauge_1} GR {turns_1} + 1#{wire_gauge_2} GD {turns_2} {orientation} {rohs}"
+                )
+
+            # Case 6: Double Core, Twisted Wires
+            elif core_type == "double" and wire_type == "twisted":
+                wire_gauge = wire_configs[0].get("gauge", "")
+                turns = f"{wire_configs[0].get('turns', 0) + 0.5}T"
+                part_description = f"{xfmr_prefix} 2 CORES {number_of_wires}#{wire_gauge} RDGR {turns} {orientation} {rohs}"
+
+            else:
+                part_description = f"{xfmr_prefix} Core (B60), wire gauge, number of turns, {orientation} {rohs}"
+
+            comments = "Packing method depends on orientation: Vertical = P2, Horizontal = P0"
+            notes = "XFMR description auto-generated based on PiBase inputs."
+
+        elif component_name == "Resonator Details":
+            resonator_size = item.get("resonatorSize", "").strip()
+            dielectric_constant = item.get("dielectricConstant", "").strip() or "09"
+            resonator_frequency = item.get("resonatorFrequency", "").strip() or (edu_number or "2345")
+            assembly_type = item.get("assemblyType", "").strip().lower()
+
+            # Mapping resonator size to component number
+            size_to_component_number = {
+                "1.5": "B51-18-",
+                "2": "B51-29-",
+                "3": "B51-16-",
+                "4": "B51-15-",
+                "5": "B51-17-",
+                "6": "B51-22-",
+                "12": "B51-24-",
+            }
+
+            component_number = size_to_component_number.get(resonator_size, "B51-15-")  # Default to B51-15- if not found
+
+            part_no = f"{component_number}{dielectric_constant}-{resonator_frequency}-{counter_str}+"
+
+            if assembly_type == "tab":
+                part_description = "RESONATOR WITH SOLDERED TAB"
+            elif assembly_type == "wire":
+                part_description = "RESONATOR WITHOUT TAB"
+            else:
+                part_description = "RESONATOR"
+
+            comments = item.get("comments", "-")
+
 
         elif component_name == "Air Coil":
             part_no = f"B65-NEW-{counter_str}+"
-            part_description = "Wire gauge, inner diameter, number of turns"
+
+            wire_gauge = item.get('wireGauge', '').strip()
+            inner_diameter = item.get('innerDiameter', '').strip()
+            number_of_turns = item.get('numberOfTurns', '').strip()
+            length = item.get('lengthOfAircoil', '').strip()
+            width = item.get('widthOfAircoil', '').strip()
+
+            if wire_gauge and inner_diameter and number_of_turns and length and width:
+                part_description = (
+                    f"AIRCOIL {wire_gauge} AWG, ID {inner_diameter}, {number_of_turns}T, "
+                    f"Length {length}, Width {width}"
+                )
+            else:
+                part_description = "Wire gauge, inner diameter, number of turns, length, width"
+
+            # Optional: you can also handle comments for air coil if needed
+
 
         elif component_name == "Shield":
-            part_no = f"B17-XXX{edu_number or 'YYYY'}-01+"
-            part_description = "DISPLAY AS EMPTY"
+            part_no = f"B17-EDU{edu_number or 'YYYY'}-{counter_str}+"
+            part_description = "----"
             notes = "SHIELD 1.145 X .230 X .010 THK"
 
         elif component_name == "Finger Details":
-            part_no = f"B85-{edu_number or 'XXX'}{opu_number or 'YYYY'}-01+"
-            comments = "? How does the tool know which number to be picked?"
+            edu_code = edu_number or "XXX"
+
+            # ✅ Part number format using only EDU number
+            part_no = f"B85-EDU{edu_code}-{counter_str}+"
+
+            # ✅ Part description as per your requirement
+            part_description = "----"
+
+            # ✅ Fixed comment for Finger Details
+            comments = "Part to be finalized by CAD."
+        
+        elif component_name == "Copper Flap Details":
+            edu_code = edu_number or "XXX"
+
+            # ✅ Part number format
+            part_no = f"B85-TMEDU{edu_code}-{counter_str}+"
+
+            # ✅ Part description format
+            part_description = "----"
+
+            # ✅ Fixed comment
+            comments = "Part to be finalized by CAD."
+            notes = "COPPER TAB .08X.03X.003 RoHS"
+        
+        elif component_name == "LTCC Details":
+            modelName = item.get("modelName") or "XXX"
+            part_no = f"Model Name : {modelName}"
+            part_description = "-----"
+
     name_value = item.get("name", "")
     return {
         "id": str(s_no),
@@ -258,16 +463,17 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
         "componentName": component_name,
         "component": name_value or component_name,
         "partNo": part_no,
-        "rev": item.get("rev", ""),
-        "partDescription": part_description or item.get("partDescription", ""),
-        "qtyPerUnit": item.get("qtyPerUnit", ""),
-        "stdPkgQty": item.get("stdPkgQty", ""),
-        "qtyRequired": item.get("qtyRequired", ""),
+        "rev": item.get("rev", "") or "------",
+        "partDescription": item.get("partDescription", "") or part_description ,
+        "qtyPerUnit": item.get("qtyPerUnit", "") or 1,
+        "stdPkgQty": item.get("stdPkgQty", "") or 1,
+        "qtyRequired": item.get("qtyRequired", "") or 1,
         "issuedQty": item.get("issuedQty", ""),
         "qNo": "",
-        "comments": "",
+        "comments": comments,
         "notes": notes,
     }
+
 
 
 class MakeBillRecordSerializer(serializers.ModelSerializer):
