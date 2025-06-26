@@ -1,16 +1,41 @@
+"""
+thelifi.views
+
+API endpoints for:
+- Uploading filter files (S2P, simulation) and creating a submission record.
+- Calculating KPIs and generating summary Excel files.
+- Generating plots based on submission and plot configuration.
+- Listing all files in a submission folder.
+
+All endpoints include error handling and OpenAPI/Swagger documentation.
+"""
+
 import os
 import uuid
+import glob
+import warnings
+import numpy as np
+import pandas as pd
+import skrf as rf
+
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import AllowAny
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
 from .models import FilterSubmission
+from .plotgeneration import create_main_execution
 
 class FilterUploadView(APIView):
-    parser_classes = [MultiPartParser, FormParser]  # 🔥 Mandatory for file upload
+    """
+    Upload model details with multiple S2P and Simulation files.
+    Creates a submission record and stores files in a unique folder.
+    """
+    parser_classes = [MultiPartParser, FormParser]
 
     @swagger_auto_schema(
         operation_description="Upload model details with multiple S2P and Simulation files.",
@@ -24,63 +49,56 @@ class FilterUploadView(APIView):
         responses={201: "Files uploaded successfully", 400: "Bad Request"}
     )
     def post(self, request):
-        model_number = request.data.get('model_number')
-        edu_number = request.data.get('edu_number')
-        filter_type = request.data.get('filter_type')
-        s2p_files = request.FILES.getlist('s2p_files')
-        simulation_files = request.FILES.getlist('simulation_files')
+        """
+        Handle file upload and submission creation.
+        """
+        try:
+            model_number = request.data.get('model_number')
+            edu_number = request.data.get('edu_number')
+            filter_type = request.data.get('filter_type')
+            s2p_files = request.FILES.getlist('s2p_files')
+            simulation_files = request.FILES.getlist('simulation_files')
 
-        if not (model_number and edu_number and filter_type and s2p_files):
-            return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
+            if not (model_number and edu_number and filter_type and s2p_files):
+                return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
 
-        folder_name = f"{model_number}_{edu_number}_{uuid.uuid4().hex[:6]}"
-        base_path = os.path.join(settings.MEDIA_ROOT, 'uploads', folder_name)
-        s2p_path = os.path.join(base_path, 's2pFiles')
-        sim_path = os.path.join(base_path, 'Simulation_Files')
-        plot_path = os.path.join(base_path, 'Generated_Plots')
+            folder_name = f"{model_number}_{edu_number}_{uuid.uuid4().hex[:6]}"
+            base_path = os.path.join(settings.MEDIA_ROOT, 'uploads', folder_name)
+            s2p_path = os.path.join(base_path, 's2pFiles')
+            sim_path = os.path.join(base_path, 'Simulation_Files')
+            plot_path = os.path.join(base_path, 'Generated_Plots')
 
-        os.makedirs(s2p_path, exist_ok=True)
-        os.makedirs(sim_path, exist_ok=True)
-        os.makedirs(plot_path, exist_ok=True)
+            os.makedirs(s2p_path, exist_ok=True)
+            os.makedirs(sim_path, exist_ok=True)
+            os.makedirs(plot_path, exist_ok=True)
 
-        for file in s2p_files:
-            file_path = os.path.join(s2p_path, file.name)
-            with open(file_path, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
+            for file in s2p_files:
+                file_path = os.path.join(s2p_path, file.name)
+                with open(file_path, 'wb+') as destination:
+                    for chunk in file.chunks():
+                        destination.write(chunk)
 
-        for file in simulation_files:
-            file_path = os.path.join(sim_path, file.name)
-            with open(file_path, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
+            for file in simulation_files:
+                file_path = os.path.join(sim_path, file.name)
+                with open(file_path, 'wb+') as destination:
+                    for chunk in file.chunks():
+                        destination.write(chunk)
 
-        submission = FilterSubmission.objects.create(
-            folder_name=folder_name,
-            model_number=model_number,
-            edu_number=edu_number,
-            filter_type=filter_type
-        )
+            submission = FilterSubmission.objects.create(
+                folder_name=folder_name,
+                model_number=model_number,
+                edu_number=edu_number,
+                filter_type=filter_type
+            )
 
-        return Response({"message": "Files uploaded successfully.","submission_id": submission.id , "folder_name": folder_name}, status=status.HTTP_201_CREATED)
-
-
-import os
-import glob
-import warnings
-import numpy as np
-import pandas as pd
-import skrf as rf
-from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from .models import FilterSubmission
-
+            return Response({"message": "Files uploaded successfully.", "submission_id": submission.id, "folder_name": folder_name}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class KPI_CalculationAPIView(APIView):
+    """
+    Calculate KPIs and generate summary Excel for a submission.
+    """
     @swagger_auto_schema(
         operation_description="Calculate KPIs and generate summary Excel.",
         request_body=openapi.Schema(
@@ -94,6 +112,9 @@ class KPI_CalculationAPIView(APIView):
         responses={200: "Summary generated successfully", 400: "Bad Request", 404: "Submission not found"}
     )
     def post(self, request):
+        """
+        Calculate KPIs and generate summary Excel.
+        """
         submission_id = request.data.get('submission_id')
         kpi_data = request.data.get('kpi_data')
 
@@ -110,17 +131,18 @@ class KPI_CalculationAPIView(APIView):
         plot_path = os.path.join(base_path, 'Generated_Plots')
 
         try:
-            excel_path = self.generate_summary(s2p_path, plot_path, kpi_data,base_path)
-
+            excel_path = self.generate_summary(s2p_path, plot_path, kpi_data, base_path)
             return Response({
                 "message": "Summary generated successfully.",
                 "excel_file_path": excel_path.replace(settings.MEDIA_ROOT, '/media')
             }, status=status.HTTP_200_OK)
-
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def generate_summary(self, s2p_folder, plot_folder, kpi_config,base_path):
+    def generate_summary(self, s2p_folder, plot_folder, kpi_config, base_path):
+        """
+        Generate summary Excel file for KPIs.
+        """
         records = []
         s2p_files = glob.glob(os.path.join(s2p_folder, 'U*.s2p'))
 
@@ -192,7 +214,6 @@ class KPI_CalculationAPIView(APIView):
                 continue
             records.append([os.path.basename(p)] + kpis_for_network(nt, kpi_config))
 
-        # Build dynamic column headers
         cols = ["File"]
         for kpi, bands in kpi_config["KPIs"].items():
             cols.extend([kpi + "_" + b["name"] for b in bands])
@@ -243,18 +264,10 @@ class KPI_CalculationAPIView(APIView):
 
         return summary_excel_path
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
-from django.conf import settings
-from .models import FilterSubmission
-from .plotGeneration import create_main_execution
-import os
-import glob
-
 class PlotGenerationAPIView(APIView):
+    """
+    Generate plots based on submission_id and plot configuration.
+    """
     @swagger_auto_schema(
         operation_description="Generate plots based on submission_id and plot configuration.",
         manual_parameters=[
@@ -271,6 +284,9 @@ class PlotGenerationAPIView(APIView):
         responses={200: "Plots generated successfully", 400: "Bad Request", 404: "Submission not found"}
     )
     def post(self, request):
+        """
+        Generate plots for a submission using the provided plot configuration.
+        """
         try:
             submission_id = request.query_params.get('submission_id')
             plot_config = request.data
@@ -281,13 +297,11 @@ class PlotGenerationAPIView(APIView):
             if not plot_config:
                 return Response({'error': 'plot_config is required in request body.'}, status=400)
 
-            # Fetch submission
             try:
                 submission = FilterSubmission.objects.get(id=submission_id)
             except FilterSubmission.DoesNotExist:
                 return Response({'error': 'Submission not found.'}, status=404)
 
-            # Prepare paths
             folder_full_path = os.path.join(settings.MEDIA_ROOT, submission.folder_path)
             if not os.path.exists(folder_full_path):
                 return Response({'error': 'Submission folder not found on server.'}, status=404)
@@ -301,11 +315,9 @@ class PlotGenerationAPIView(APIView):
             if not excel_files or not s2p_files:
                 return Response({'error': 'Required input files not found in submission folder.'}, status=400)
 
-            # Create Generated_Plots folder if not exists
             generated_plots_folder = os.path.join(folder_full_path, 'Generated_Plots')
             os.makedirs(generated_plots_folder, exist_ok=True)
 
-            # Run plot generation
             generated_plots = create_main_execution(
                 plot_config_data=plot_config,
                 excel_files=excel_files,
@@ -319,7 +331,6 @@ class PlotGenerationAPIView(APIView):
             if not generated_plots:
                 return Response({'error': 'No plots were generated.'}, status=400)
 
-            # Build URLs for generated plots
             plot_urls = []
             for plot in generated_plots:
                 plot_path = os.path.join(generated_plots_folder, plot)
@@ -337,3 +348,56 @@ class PlotGenerationAPIView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class SubmissionFilesListAPIView(APIView):
+    """
+    Get all files in the submission folder by submission_id.
+    """
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Get all files in the submission folder by submission_id.",
+        manual_parameters=[
+            openapi.Parameter(
+                'submission_id', openapi.IN_QUERY, description="ID of the uploaded submission record",
+                type=openapi.TYPE_INTEGER, required=True
+            )
+        ],
+        responses={200: "List of files", 400: "Bad Request", 404: "Submission not found"}
+    )
+    def get(self, request):
+        """
+        List all files in the submission folder.
+        """
+        try:
+            submission_id = request.query_params.get('submission_id')
+
+            if not submission_id:
+                return Response({'error': 'submission_id is required as a query parameter.'}, status=400)
+
+            try:
+                submission = FilterSubmission.objects.get(id=submission_id)
+            except FilterSubmission.DoesNotExist:
+                return Response({'error': 'Submission not found.'}, status=404)
+
+            folder_full_path = os.path.join(settings.MEDIA_ROOT, submission.folder_path)
+
+            if not os.path.exists(folder_full_path):
+                return Response({'error': 'Submission folder not found on server.'}, status=404)
+
+            file_list = []
+            for root, dirs, files in os.walk(folder_full_path):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(full_path, settings.MEDIA_ROOT)
+                    file_list.append(f"/media/{relative_path.replace(os.path.sep, '/')}")
+
+            return Response({
+                'message': 'File list fetched successfully.',
+                'submission_id': submission_id,
+                'submission_folder': submission.folder_path,
+                'files': file_list
+            }, status=200)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
