@@ -110,7 +110,7 @@ class KPI_CalculationAPIView(APIView):
         plot_path = os.path.join(base_path, 'Generated_Plots')
 
         try:
-            excel_path = self.generate_summary(s2p_path, plot_path, kpi_data)
+            excel_path = self.generate_summary(s2p_path, plot_path, kpi_data,base_path)
 
             return Response({
                 "message": "Summary generated successfully.",
@@ -120,7 +120,7 @@ class KPI_CalculationAPIView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def generate_summary(self, s2p_folder, plot_folder, kpi_config):
+    def generate_summary(self, s2p_folder, plot_folder, kpi_config,base_path):
         records = []
         s2p_files = glob.glob(os.path.join(s2p_folder, 'U*.s2p'))
 
@@ -236,10 +236,104 @@ class KPI_CalculationAPIView(APIView):
 
         summary = pd.DataFrame(summary_rows)
 
-        summary_excel_path = os.path.join(s2p_folder, 'SParam_Summary.xlsx')
+        summary_excel_path = os.path.join(base_path, 'SParam_Summary.xlsx')
         with pd.ExcelWriter(summary_excel_path, engine='openpyxl') as xl:
             summary.to_excel(xl, sheet_name="Summary", index=False)
             per_file.to_excel(xl, sheet_name="Per_File", index=False)
 
         return summary_excel_path
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
+from django.conf import settings
+from .models import FilterSubmission
+from .plotGeneration import create_main_execution
+import os
+import glob
+
+class PlotGenerationAPIView(APIView):
+    @swagger_auto_schema(
+        operation_description="Generate plots based on submission_id and plot configuration.",
+        manual_parameters=[
+            openapi.Parameter(
+                'submission_id', openapi.IN_QUERY, description="ID of the uploaded submission record",
+                type=openapi.TYPE_INTEGER, required=True
+            )
+        ],
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            description="Plot configuration JSON",
+            additional_properties=openapi.Schema(type=openapi.TYPE_OBJECT)
+        ),
+        responses={200: "Plots generated successfully", 400: "Bad Request", 404: "Submission not found"}
+    )
+    def post(self, request):
+        try:
+            submission_id = request.query_params.get('submission_id')
+            plot_config = request.data
+
+            if not submission_id:
+                return Response({'error': 'submission_id is required as a query parameter.'}, status=400)
+
+            if not plot_config:
+                return Response({'error': 'plot_config is required in request body.'}, status=400)
+
+            # Fetch submission
+            try:
+                submission = FilterSubmission.objects.get(id=submission_id)
+            except FilterSubmission.DoesNotExist:
+                return Response({'error': 'Submission not found.'}, status=404)
+
+            # Prepare paths
+            folder_full_path = os.path.join(settings.MEDIA_ROOT, submission.folder_path)
+            if not os.path.exists(folder_full_path):
+                return Response({'error': 'Submission folder not found on server.'}, status=404)
+
+            excel_files = glob.glob(os.path.join(folder_full_path, 'SParam_Summary.xlsx'))
+            s2p_files = glob.glob(os.path.join(folder_full_path, 's2pFiles', '*.s2p'))
+            sim_s2p_files = glob.glob(os.path.join(folder_full_path, 'Simulation_Files', '*_Simulated_*.s2p'))
+            s11_sigma_files = glob.glob(os.path.join(folder_full_path, 'Simulation_Files', 'Simulated S11_Sigma_Data.csv'))
+            s21_sigma_files = glob.glob(os.path.join(folder_full_path, 'Simulation_Files', 'Simulated S21_Sigma_Data.csv'))
+
+            if not excel_files or not s2p_files:
+                return Response({'error': 'Required input files not found in submission folder.'}, status=400)
+
+            # Create Generated_Plots folder if not exists
+            generated_plots_folder = os.path.join(folder_full_path, 'Generated_Plots')
+            os.makedirs(generated_plots_folder, exist_ok=True)
+
+            # Run plot generation
+            generated_plots = create_main_execution(
+                plot_config_data=plot_config,
+                excel_files=excel_files,
+                s2p_files=s2p_files,
+                sim_s2p_files=sim_s2p_files,
+                s11_sigma_files=s11_sigma_files,
+                s21_sigma_files=s21_sigma_files,
+                save_folder=generated_plots_folder
+            )
+
+            if not generated_plots:
+                return Response({'error': 'No plots were generated.'}, status=400)
+
+            # Build URLs for generated plots
+            plot_urls = []
+            for plot in generated_plots:
+                plot_path = os.path.join(generated_plots_folder, plot)
+                if os.path.exists(plot_path):
+                    relative_plot_path = os.path.relpath(plot_path, settings.MEDIA_ROOT)
+                    plot_urls.append(f"/media/{relative_plot_path.replace(os.path.sep, '/')}")
+
+            return Response({
+                'message': 'Plots generated successfully.',
+                'submission_id': submission_id,
+                'submission_folder': submission.folder_path,
+                'generated_plots': plot_urls,
+                'received_plot_config': plot_config
+            }, status=200)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
