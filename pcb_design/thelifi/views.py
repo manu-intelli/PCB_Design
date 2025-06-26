@@ -28,7 +28,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
 from .models import FilterSubmission
-from .plotgeneration import create_main_execution
+from .plotGeneration import create_main_execution
 
 class FilterUploadView(APIView):
     """
