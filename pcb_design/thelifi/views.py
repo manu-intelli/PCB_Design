@@ -55,14 +55,14 @@ class FilterUploadView(APIView):
                 for chunk in file.chunks():
                     destination.write(chunk)
 
-        FilterSubmission.objects.create(
+        submission = FilterSubmission.objects.create(
             folder_name=folder_name,
             model_number=model_number,
             edu_number=edu_number,
             filter_type=filter_type
         )
 
-        return Response({"message": "Files uploaded successfully.", "folder_name": folder_name}, status=status.HTTP_201_CREATED)
+        return Response({"message": "Files uploaded successfully.","submission_id": submission.id , "folder_name": folder_name}, status=status.HTTP_201_CREATED)
 
 
 import os
@@ -105,7 +105,6 @@ class KPI_CalculationAPIView(APIView):
         except FilterSubmission.DoesNotExist:
             return Response({"error": "Submission not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # File paths
         base_path = os.path.join(settings.MEDIA_ROOT, 'uploads', submission.folder_name)
         s2p_path = os.path.join(base_path, 's2pFiles')
         plot_path = os.path.join(base_path, 'Generated_Plots')
@@ -184,7 +183,6 @@ class KPI_CalculationAPIView(APIView):
                 out.append(rej)
             return out
 
-        # Start processing
         for p in s2p_files:
             cp = convert_type2(p)
             try:
@@ -194,6 +192,7 @@ class KPI_CalculationAPIView(APIView):
                 continue
             records.append([os.path.basename(p)] + kpis_for_network(nt, kpi_config))
 
+        # Build dynamic column headers
         cols = ["File"]
         for kpi, bands in kpi_config["KPIs"].items():
             cols.extend([kpi + "_" + b["name"] for b in bands])
@@ -210,17 +209,19 @@ class KPI_CalculationAPIView(APIView):
 
             usl_minus_mean = usl - mu if not np.isnan(usl) else np.nan
             mean_minus_lsl = mu - lsl if not np.isnan(lsl) else np.nan
-            c_hi = usl_minus_mean / three if not np.isnan(usl) else np.nan
-            c_lo = mean_minus_lsl / three if not np.isnan(lsl) else np.nan
+            c_hi = abs(usl_minus_mean / three) if not np.isnan(usl) else np.nan
+            c_lo = abs(mean_minus_lsl / three) if not np.isnan(lsl) else np.nan
             cpk = min(c_hi, c_lo) if not (np.isnan(c_hi) or np.isnan(c_lo)) else np.nan
 
             return dict(
                 Parameter=label, Min=mn, Max=mx, Mean=mu, Sigma=sigma,
                 _4p5Sigma=four5, _3Sigma=three,
                 USL=usl, LSL=lsl,
-                USL_Mean=usl_minus_mean, _USL_Mean_div_3sigma=c_hi,
-                Mean_LSL=mean_minus_lsl, _Mean_LSL_div_3sigma=c_lo,
-                CpK=cpk
+                USL_Mean=abs(usl_minus_mean) if not np.isnan(usl_minus_mean) else 0,
+                _USL_Mean_div_3sigma=c_hi if not np.isnan(c_hi) else 0,
+                Mean_LSL=abs(mean_minus_lsl) if not np.isnan(mean_minus_lsl) else 0,
+                _Mean_LSL_div_3sigma=c_lo if not np.isnan(c_lo) else 0,
+                CpK=cpk if not np.isnan(cpk) else 0
             )
 
         summary_rows = []
@@ -241,3 +242,4 @@ class KPI_CalculationAPIView(APIView):
             per_file.to_excel(xl, sheet_name="Per_File", index=False)
 
         return summary_excel_path
+
