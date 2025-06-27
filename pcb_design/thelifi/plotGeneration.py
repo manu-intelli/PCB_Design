@@ -260,19 +260,9 @@ def create_histogram_plots(excel_data, plot_config, save_folder='.'):
         print(f"Created histogram: {plot_path}")
     
     return plots_created
-def create_main_execution(
-        plot_config_data,
-        excel_files,
-        s2p_files,
-        sim_s2p_files=None,
-        s11_sigma_files=None,
-        s21_sigma_files=None,
-        kpi_config_data=None,
-        save_folder='.'
-):
+def generate_s_parameter_plots_only(plot_config_data, excel_files, s2p_files, sim_s2p_files=None, s11_sigma_files=None, s21_sigma_files=None, kpi_config_data=None, save_folder='.'):
     try:
         plot_config, kpi_config = load_configuration(plot_config_data, kpi_config_data)
-        excel_data = load_excel_data(excel_files)
         networks = load_s2p_files(s2p_files)
         sim_data = load_simulation_data(sim_s2p_files, s11_sigma_files, s21_sigma_files)
 
@@ -281,6 +271,20 @@ def create_main_execution(
         # Generate S-parameter plots
         s_param_plots = create_s_parameter_plots(networks, plot_config, kpi_config, sim_data, save_folder)
         all_plots.extend(s_param_plots)
+
+        return all_plots
+
+    except Exception as e:
+        print(f"Error during S-Parameter plot generation: {e}")
+        return []
+
+
+def generate_statistical_and_histogram_plots_only(plot_config_data, excel_files, save_folder='.'):
+    try:
+        plot_config, _ = load_configuration(plot_config_data)
+        excel_data = load_excel_data(excel_files)
+
+        all_plots = []
 
         # Generate statistical plots
         statistical_plots = create_statistical_plots(excel_data, plot_config, save_folder)
@@ -293,5 +297,5 @@ def create_main_execution(
         return all_plots
 
     except Exception as e:
-        print(f"Error during main execution: {e}")
+        print(f"Error during statistical/histogram plot generation: {e}")
         return []
