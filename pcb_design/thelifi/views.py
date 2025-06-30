@@ -131,10 +131,13 @@ class KPI_CalculationAPIView(APIView):
         plot_path = os.path.join(base_path, 'Generated_Plots')
 
         try:
-            excel_path = self.generate_summary(s2p_path, plot_path, kpi_data, base_path)
+            excel_path, summary_json, per_file_json = self.generate_summary(s2p_path, plot_path, kpi_data, base_path)
             return Response({
                 "message": "Summary generated successfully.",
-                "excel_file_path": excel_path.replace(settings.MEDIA_ROOT, '/media')
+                "excel_file_path": excel_path.replace(settings.MEDIA_ROOT, '/media'),
+                "kpi_config_data": kpi_data,
+                "summary_data": summary_json,
+                "per_file_data": per_file_json,
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -171,7 +174,8 @@ class KPI_CalculationAPIView(APIView):
             mag11 = 20 * np.log10(np.abs(s11))
             mag22 = 20 * np.log10(np.abs(s22))
             phase = np.unwrap(np.angle(s21))
-            gd_ns = -np.gradient(phase, f) / (2 * np.pi) * 1e9
+            #gd_ns = -np.gradient(phase, f) / (2 * np.pi) * 1e9
+            gd_ns = np.round(-np.gradient(phase, f) / (2 * np.pi) * 1e9, 4)
 
             out = []
             for kpi, bands in CFG["KPIs"].items():
@@ -189,12 +193,26 @@ class KPI_CalculationAPIView(APIView):
                         val = gd_ns[mask].max()
                     elif kpi == "GDV":
                         val = np.ptp(gd_ns[mask])
-                    elif kpi == "LPD":
-                        A = np.vstack([f[mask], np.ones_like(f[mask])]).T
-                        slope, intercept = np.linalg.lstsq(A, phase[mask], rcond=None)[0]
-                        resid = phase - (slope * f + intercept)
-                        lpd_deg = np.degrees(resid)
-                        val = max(abs(lpd_deg[mask].max()), abs(lpd_deg[mask].min()))
+                    # '''
+                    # elif kpi == "LPD":
+                    #     A = np.vstack([f[mask], np.ones_like(f[mask])]).T
+                    #     slope, intercept = np.linalg.lstsq(A, phase[mask], rcond=None)[0]
+                    #     resid = phase - (slope * f + intercept)
+                    #     lpd_deg = np.degrees(resid)
+                    #     val = max(abs(lpd_deg[mask].max()), abs(lpd_deg[mask].min()))
+                    # '''
+                    elif kpi == "LPD_MIN":  
+                        A = np.vstack([f[mask], np.ones_like(f[mask])]).T  
+                        slope, intercept = np.linalg.lstsq(A, phase[mask], rcond=None)[0]  
+                        resid = phase - (slope * f + intercept)  
+                        lpd_deg = np.degrees(resid)  
+                        val = lpd_deg[mask].min()
+                    elif kpi == "LPD_MAX":  
+                        A = np.vstack([f[mask], np.ones_like(f[mask])]).T  
+                        slope, intercept = np.linalg.lstsq(A, phase[mask], rcond=None)[0]  
+                        resid = phase - (slope * f + intercept)  
+                        lpd_deg = np.degrees(resid)  
+                        val = lpd_deg[mask].max()  
                     else:
                         val = np.nan
                     out.append(val)
@@ -220,13 +238,14 @@ class KPI_CalculationAPIView(APIView):
         cols.extend([sb["name"] for sb in kpi_config["StopBands"]])
         per_file = pd.DataFrame(records, columns=cols)
 
+        
         def row_stats(label, series, usl=0, lsl=0):
             mn = series.min()
             mx = series.max()
             mu = series.mean()
             sigma = series.std(ddof=1)
-            three = 3 * sigma
-            four5 = 4.5 * sigma
+            three = mu + (3 * sigma)
+            four5 = mu + (4.5 * sigma)  
 
             usl_minus_mean = usl - mu 
             mean_minus_lsl = mu - lsl 
@@ -234,23 +253,36 @@ class KPI_CalculationAPIView(APIView):
             c_lo = abs(mean_minus_lsl / three) 
             cpk = min(c_hi, c_lo) 
 
+            usl_minus_mean = abs(usl - mu)   
+            mean_minus_lsl = abs(mu - lsl)   
+            c_hi = abs(usl_minus_mean / three)   
+            c_lo = abs(mean_minus_lsl / three)   
+            cpk = min(c_hi, c_lo)  
+
             
-            return dict(  
-                Parameter=label, Min=mn, Max=mx, Mean=mu, Sigma=sigma,  
-                _4p5Sigma=four5, _3Sigma=three,  
-                USL=usl, LSL=lsl,  
-                USL_Mean=usl_minus_mean, 
-                _USL_Mean_div_3sigma=c_hi,  
-                Mean_LSL=mean_minus_lsl, 
-                _Mean_LSL_div_3sigma=c_lo,  
-                CpK=cpk  
-            )  
+            return {
+                "Parameter": label,
+                "Min": mn,
+                "Max": mx,
+                "Mean": mu,
+                "Sigma": sigma,
+                "μ+4p5Sigma": four5,
+                "μ+3Sigma": three,
+                "USL": usl,
+                "LSL": lsl,
+                "USL_Mean": usl_minus_mean,
+                "_USL_Mean_div_3sigma": c_hi,
+                "Mean_LSL": mean_minus_lsl,
+                "_Mean_LSL_div_3sigma": c_lo,
+                "CpK": cpk
+            }
 
         summary_rows = []
         for kpi, bands in kpi_config["KPIs"].items():
             for b in bands:
                 col = kpi + "_" + b["name"]
                 summary_rows.append(row_stats(col, per_file[col], b.get("USL", 0), b.get("LSL", 0)))
+                
 
         for sb in kpi_config["StopBands"]:
             col = sb["name"]
@@ -263,7 +295,11 @@ class KPI_CalculationAPIView(APIView):
             summary.to_excel(xl, sheet_name="Summary", index=False)
             per_file.to_excel(xl, sheet_name="Per_File", index=False)
 
-        return summary_excel_path
+        # Convert DataFrames to JSON-serializable dicts
+        summary_json = summary.to_dict(orient='records')
+        per_file_json = per_file.to_dict(orient='records')
+
+        return summary_excel_path, summary_json, per_file_json 
 
 class SubmissionFilesListAPIView(APIView):
     """
@@ -321,14 +357,15 @@ class SubmissionFilesListAPIView(APIView):
 
 class SParameterPlotAPIView(APIView):
     @swagger_auto_schema(
-        operation_description="Generate S-Parameter plots based on submission_id and plot configuration.",
+        operation_description="Generate S-Parameter plots based on submission_id, plot configuration, and KPI configuration.",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'submission_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="ID of the submission"),
-                'plot_config': openapi.Schema(type=openapi.TYPE_OBJECT, description="Plot configuration JSON")
+                'plot_config': openapi.Schema(type=openapi.TYPE_OBJECT, description="Plot configuration JSON"),
+                'kpi_config_data': openapi.Schema(type=openapi.TYPE_OBJECT, description="KPI configuration JSON (must include 'KPIs' key)")
             },
-            required=['submission_id', 'plot_config']
+            required=['submission_id', 'plot_config', 'kpi_config_data']
         ),
         responses={200: "Plots generated successfully", 400: "Bad Request", 404: "Submission not found"}
     )
@@ -336,14 +373,20 @@ class SParameterPlotAPIView(APIView):
         try:
             submission_id = request.data.get('submission_id')
             plot_config = request.data.get('plot_config')
+            kpi_config_data = request.data.get('kpi_config_data')
 
             if not submission_id:
                 return Response({'error': 'submission_id is required.'}, status=400)
-
             if not plot_config:
                 return Response({'error': 'plot_config is required.'}, status=400)
+            if not kpi_config_data or 'KPIs' not in kpi_config_data:
+                return Response({'error': "kpi_config_data is required and must contain a 'KPIs' key."}, status=400)
 
-            submission = FilterSubmission.objects.get(id=submission_id)
+            try:
+                submission = FilterSubmission.objects.get(id=submission_id)
+            except FilterSubmission.DoesNotExist:
+                return Response({'error': 'Submission not found.'}, status=404)
+
             folder_full_path = os.path.join(settings.MEDIA_ROOT, submission.folder_path)
             excel_files = glob.glob(os.path.join(folder_full_path, 'SParam_Summary.xlsx'))
             s2p_files = glob.glob(os.path.join(folder_full_path, 's2pFiles', '*.s2p'))
@@ -361,6 +404,7 @@ class SParameterPlotAPIView(APIView):
                 sim_s2p_files=sim_s2p_files,
                 s11_sigma_files=s11_sigma_files,
                 s21_sigma_files=s21_sigma_files,
+                kpi_config_data=kpi_config_data,
                 save_folder=generated_plots_folder
             )
 

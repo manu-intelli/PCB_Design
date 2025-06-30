@@ -63,7 +63,6 @@ def load_simulation_data(sim_s2p_files, s11_sigma_files, s21_sigma_files):
             print(f"Warning: Could not load S21 sigma data: {e}")
     return sim_data
 
-
 def apply_frequency_shift(network, shift_mhz):
     if shift_mhz == 0:
         return network
@@ -73,7 +72,6 @@ def apply_frequency_shift(network, shift_mhz):
     new_frequency = rf.Frequency.from_f(shifted_freq_hz, unit='Hz')
     shifted_network = rf.Network(frequency=new_frequency, s=network.s, name=network.name)
     return shifted_network
-
 
 # For brevity, we'll define a helper function to generate each plot
 
@@ -119,7 +117,6 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
     plt.close()
 
     return plot_filename
-
 
 
 def create_s_parameter_plots(networks, plot_config, kpi_config, sim_data=None, save_folder='.'): 
@@ -260,9 +257,158 @@ def create_histogram_plots(excel_data, plot_config, save_folder='.'):
         print(f"Created histogram: {plot_path}")
     
     return plots_created
+
+def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_folder='.'):
+    plots_created = []
+
+    # -------- Group Delay Plot --------
+    def phase_and_gd(network):
+        f_hz = network.frequency.f  # Hz
+        ang = np.unwrap(np.angle(network.s[:, 1, 0]))  # S21 phase
+        df = np.gradient(f_hz)
+        gd_s = -np.gradient(ang) / (2 * np.pi * df)
+        return ang, gd_s * 1e9  # ns
+
+    plt.figure(figsize=(12, 6))
+    for fname, nt in networks.items():
+        for s in freq_shifts:
+            nt_shift = apply_frequency_shift(nt, s)
+            _, gd_ns = phase_and_gd(nt_shift)
+            plt.plot(nt_shift.frequency.f / 1e6, gd_ns, alpha=.7, label=f"{fname} {s:+.1f} MHz" if s != 0 else fname)
+
+    cfg = plot_config['axis_ranges']['advanced_plots']['group_delay']
+    plt.xlim(cfg['x_axis']['min'], cfg['x_axis']['max'])
+    plt.ylim(cfg['y_axis']['min'], cfg['y_axis']['max'])
+    plt.xlabel("Frequency (MHz)")
+    plt.ylabel("GD (ns)")
+    plt.title("Group Delay (continuous)")
+    plt.grid(True, alpha=.3)
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    plt.tight_layout()
+    gd_plot = os.path.join(save_folder, "GD_Curve.png")
+    plt.savefig(gd_plot, dpi=300)
+    plt.close()
+    plots_created.append("GD_Curve.png")
+
+    # -------- Linear Phase Deviation Plot --------
+    plt.figure(figsize=(12, 6))
+    LPD_FREQ_LOW, LPD_FREQ_HIGH = kpi_config['KPIs']['LPD_MIN'][0]['range']
+
+    for fname, nt in networks.items():
+        for s in freq_shifts:
+            nt_shift = apply_frequency_shift(nt, s)
+            phase, _ = phase_and_gd(nt_shift)
+            f_hz = nt_shift.frequency.f
+            mask = (f_hz >= LPD_FREQ_LOW) & (f_hz <= LPD_FREQ_HIGH)
+
+            if np.sum(mask) > 2:
+                f_fit = f_hz[mask]
+                phase_fit = phase[mask]
+                A = np.vstack([f_fit, np.ones_like(f_fit)]).T
+                slope, intercept = np.linalg.lstsq(A, phase_fit, rcond=None)[0]
+                linear_phase = slope * f_hz + intercept
+                phase_deviation_deg = np.degrees(phase - linear_phase)
+                lpd_band = phase_deviation_deg[mask]
+                lpd_normalized = lpd_band - lpd_band.min()
+                f_band_mhz = f_hz[mask] / 1e6
+                label = f"{fname} {s:+.1f} MHz" if s != 0 else fname
+                plt.plot(f_band_mhz, lpd_normalized, alpha=.7, label=label)
+
+    cfg = plot_config['axis_ranges']['advanced_plots']['linear_phase_deviation']
+    plt.xlim(cfg['x_axis']['min'], cfg['x_axis']['max'])
+    plt.ylim(0, 4)
+    plt.xlabel("Frequency (MHz)")
+    plt.ylabel("LPD (deg)")
+    plt.title("Linear-Phase Deviation (continuous)")
+    plt.grid(True, alpha=.3)
+    plt.legend(bbox_to_anchor=(1.05, 1))
+    plt.tight_layout()
+    lpd_plot = os.path.join(save_folder, "LPD_Curve.png")
+    plt.savefig(lpd_plot, dpi=300, bbox_inches='tight')
+    plt.close()
+    plots_created.append("LPD_Curve.png")
+
+    # -------- Flatness Scatter Plot --------
+    plt.figure(figsize=(12, 6))
+    colors = ['blue', 'red', 'green', 'orange', 'purple']
+
+    for band_idx, band in enumerate(kpi_config['KPIs']['Flat']):
+        lo, hi = band['range']
+        unit_numbers = []
+        flatness_values = []
+
+        unit_num = 1
+        for fname, nt in networks.items():
+            f = nt.frequency.f
+            s21 = 20 * np.log10(np.abs(nt.s[:, 1, 0]))
+            mask = (f >= lo) & (f <= hi)
+
+            if np.any(mask):
+                flat = s21[mask].max() - s21[mask].min()
+                unit_numbers.append(unit_num)
+                flatness_values.append(flat)
+
+            unit_num += 1
+
+        plt.scatter(unit_numbers, flatness_values, color=colors[band_idx % len(colors)], alpha=0.7, s=50, label=f"{band['name']} ({lo / 1e6:.0f}-{hi / 1e6:.0f} MHz)")
+
+        if 'USL' in band:
+            plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} dB")
+
+    plt.xlabel("Unit Number")
+    plt.ylabel("Flatness (dB)")
+    plt.title("S21 Flatness vs Unit Number")
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    flat_plot = os.path.join(save_folder, "Flatness_Scatter.png")
+    plt.savefig(flat_plot, dpi=300, bbox_inches='tight')
+    plt.close()
+    plots_created.append("Flatness_Scatter.png")
+
+    # -------- GD Variation Scatter Plot --------
+    plt.figure(figsize=(12, 6))
+    for band_idx, band in enumerate(kpi_config['KPIs']['GDV']):
+        lo, hi = band['range']
+        unit_numbers = []
+        gdv_values = []
+
+        unit_num = 1
+        for fname, nt in networks.items():
+            f = nt.frequency.f
+            _, gd_ns = phase_and_gd(nt)
+            mask = (f >= lo) & (f <= hi)
+
+            if np.any(mask):
+                gdv = np.ptp(gd_ns[mask])
+                unit_numbers.append(unit_num)
+                gdv_values.append(gdv)
+
+            unit_num += 1
+
+        plt.scatter(unit_numbers, gdv_values, color=colors[band_idx % len(colors)], alpha=0.7, s=50, label=f"{band['name']} ({lo / 1e6:.0f}-{hi / 1e6:.0f} MHz)")
+
+        if 'USL' in band:
+            plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} ns")
+
+    plt.xlabel("Unit Number")
+    plt.ylabel("GD Variation (ns)")
+    plt.title("Group Delay Variation vs Unit Number")
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    gdv_plot = os.path.join(save_folder, "GDV_Scatter.png")
+    plt.savefig(gdv_plot, dpi=300, bbox_inches='tight')
+    plt.close()
+    plots_created.append("GDV_Scatter.png")
+
+    return plots_created
+
 def generate_s_parameter_plots_only(plot_config_data, excel_files, s2p_files, sim_s2p_files=None, s11_sigma_files=None, s21_sigma_files=None, kpi_config_data=None, save_folder='.'):
     try:
         plot_config, kpi_config = load_configuration(plot_config_data, kpi_config_data)
+        if not kpi_config or 'KPIs' not in kpi_config:
+            raise ValueError("kpi_config_data must be provided and contain a 'KPIs' key.")
         networks = load_s2p_files(s2p_files)
         sim_data = load_simulation_data(sim_s2p_files, s11_sigma_files, s21_sigma_files)
 
@@ -272,11 +418,17 @@ def generate_s_parameter_plots_only(plot_config_data, excel_files, s2p_files, si
         s_param_plots = create_s_parameter_plots(networks, plot_config, kpi_config, sim_data, save_folder)
         all_plots.extend(s_param_plots)
 
+        # Generate advanced plots
+        freq_shifts = plot_config['frequency_shifts']['shifts'] if plot_config['frequency_shifts']['enabled'] else [0]
+        advanced_plots = create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_folder)
+        all_plots.extend(advanced_plots)
+
         return all_plots
 
     except Exception as e:
-        print(f"Error during S-Parameter plot generation: {e}")
+        print(f"Error during S-Parameter and advanced plot generation: {e}")
         return []
+
 
 
 def generate_statistical_and_histogram_plots_only(plot_config_data, excel_files, save_folder='.'):
