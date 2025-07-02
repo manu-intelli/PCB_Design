@@ -3,6 +3,7 @@ from django.db import models
 from django.conf import settings
 
 class FilterSubmission(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     folder_name = models.CharField(max_length=255, unique=True)
     model_number = models.CharField(max_length=100)
     edu_number = models.CharField(max_length=100)

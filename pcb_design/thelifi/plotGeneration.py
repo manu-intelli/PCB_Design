@@ -75,7 +75,7 @@ def apply_frequency_shift(network, shift_mhz):
 
 # For brevity, we'll define a helper function to generate each plot
 
-def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, param_type, save_folder, plot_filename):
+def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, param_type, save_folder, plot_filename):
     plt.figure(figsize=(12, 8))
     for filename, network in networks.items():
         for shift in freq_shifts:
@@ -92,6 +92,54 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
                 label += f" (shift: {shift:+.1f}MHz)"
             plt.plot(freq_mhz, y_values, alpha=0.7, label=label)
 
+    # ----------- SPECLINE BLOCKS -----------
+    if param_type == 'S11':
+        rl_colors = ['red', 'darkred', 'crimson']
+        for i, rl_spec in enumerate(kpi_config['KPIs'].get('RL', [])):
+            freq_start = rl_spec['range'][0] / 1e6
+            freq_end = rl_spec['range'][1] / 1e6
+            lsl_value = -abs(rl_spec['LSL'])
+            color = rl_colors[i % len(rl_colors)]
+            freq_range = np.linspace(freq_start, freq_end, 100)
+            if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+                plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{rl_spec["name"]} LSL: {lsl_value} dB')
+            plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+    elif param_type == 'S22':
+        rl_colors = ['red', 'darkred', 'crimson']
+        for i, rl_spec in enumerate(kpi_config['KPIs'].get('RL', [])):
+            freq_start = rl_spec['range'][0] / 1e6
+            freq_end = rl_spec['range'][1] / 1e6
+            lsl_value = -abs(rl_spec['LSL'])
+            color = rl_colors[i % len(rl_colors)]
+            freq_range = np.linspace(freq_start, freq_end, 100)
+            if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+                plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{rl_spec["name"]} LSL: {lsl_value} dB')
+            plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+    elif param_type == 'S21' and plot_filename == 'S21_Insertion_Loss.png':
+        il_colors = ['green', 'darkgreen', 'lime']
+        for i, il_spec in enumerate(kpi_config['KPIs'].get('IL', [])):
+            freq_start = il_spec['range'][0] / 1e6
+            freq_end = il_spec['range'][1] / 1e6
+            usl_value = -abs(il_spec['USL'])  # Always negative for loss
+            color = il_colors[i % len(il_colors)]
+            freq_range = np.linspace(freq_start, freq_end, 100)
+            if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+                plt.plot(freq_range, [usl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{il_spec["name"]} USL: {usl_value} dB')
+            plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+    elif param_type == 'S21' and plot_filename == 'S21_Rejection_Loss.png':
+        rej_colors = ['orange', 'purple', 'brown', 'pink']
+        for i, sb_spec in enumerate(kpi_config.get('StopBands', [])):
+            freq_start = sb_spec['range'][0] / 1e6
+            freq_end = sb_spec['range'][1] / 1e6
+            lsl_value = -abs(sb_spec['LSL'])  # Always negative for rejection
+            color = rej_colors[i % len(rej_colors)]
+            freq_range = np.linspace(freq_start, freq_end, 100)
+            if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+                plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{sb_spec["name"]} LSL: {lsl_value} dB')
+            plt.axvspan(freq_start, freq_end, alpha=0.1, color=color)
+
+    # ----------- END SPECLINE BLOCKS -----------
+
     if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
         sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
         if param_type == 'S11':
@@ -102,7 +150,7 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
             sim_y_values = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
         plt.plot(sim_freq_mhz, sim_y_values, 'r--', linewidth=2, label='Simulation Nominal')
 
-    config = s_param_config[param_type.lower() + '_return_loss' if param_type != 'S21' else 's21_insertion_loss']
+    config = s_param_config[param_type.lower() + '_return_loss' if param_type != 'S21' else ('s21_insertion_loss' if plot_filename == 'S21_Insertion_Loss.png' else 's21_rejection_loss')]
     plt.xlim(config['x_axis']['min'], config['x_axis']['max'])
     plt.ylim(config['y_axis']['min'], config['y_axis']['max'])
     plt.xlabel(f"Frequency ({config['x_axis']['unit']})")
@@ -119,23 +167,22 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
     return plot_filename
 
 
-def create_s_parameter_plots(networks, plot_config, kpi_config, sim_data=None, save_folder='.'): 
+def create_s_parameter_plots(networks, plot_config, kpi_config, sim_data=None, save_folder='.'):
     plots_created = []
     freq_shifts = plot_config['frequency_shifts']['shifts'] if plot_config['frequency_shifts']['enabled'] else [0]
     s_param_config = plot_config['axis_ranges']['s_parameter_plots']
 
     # S11 Return Loss Plot
-    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 'S11', save_folder, 'S11_Return_Loss.png'))
+    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, 'S11', save_folder, 'S11_Return_Loss.png'))
 
     # S22 Return Loss Plot
-    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 'S22', save_folder, 'S22_Return_Loss.png'))
+    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, 'S22', save_folder, 'S22_Return_Loss.png'))
 
     # S21 Insertion Loss Plot
-    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 'S21', save_folder, 'S21_Insertion_Loss.png'))
+    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, 'S21', save_folder, 'S21_Insertion_Loss.png'))
 
     # S21 Rejection Loss Plot
-    s_param_config['s21_insertion_loss'] = s_param_config['s21_rejection_loss']  # Using rejection config for this plot
-    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 'S21', save_folder, 'S21_Rejection_Loss.png'))
+    plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, 'S21', save_folder, 'S21_Rejection_Loss.png'))
 
     return plots_created
 def create_statistical_plots(excel_data, plot_config, save_folder='.'):
@@ -228,19 +275,23 @@ def create_histogram_plots(excel_data, plot_config, save_folder='.'):
         plt.hist(values, bins=min(20, max(5, len(values)//3)), alpha=0.7, color='skyblue', edgecolor='black')
         
         # Add vertical lines for mean and limits
-        mean_val = values.mean()
-        plt.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3f}')
+        #mean_val = values.mean()
+        #plt.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3f}')
         
         # Add ±3σ lines
-        std_val = values.std()
-        if std_val > 0:  # Only add sigma lines if std deviation is not zero
-            plt.axvline(mean_val + 3*std_val, color='orange', linestyle=':', linewidth=2, label=f'+3σ: {mean_val + 3*std_val:.3f}')
-            plt.axvline(mean_val - 3*std_val, color='orange', linestyle=':', linewidth=2, label=f'-3σ: {mean_val - 3*std_val:.3f}')
+        #std_val = values.std()
+        #if std_val > 0:  # Only add sigma lines if std deviation is not zero
+        #    plt.axvline(mean_val + 3*std_val, color='orange', linestyle=':', linewidth=2, label=f'+3σ: {mean_val + 3*std_val:.3f}')
+        #    plt.axvline(mean_val - 3*std_val, color='orange', linestyle=':', linewidth=2, label=f'-3σ: {mean_val - 3*std_val:.3f}')
         
         # Set title and labels
         plt.title(f"{param} - Distribution Histogram")
-        plt.xlabel("Value")
-        plt.ylabel("Frequency")
+        #plt.xlabel("Value")
+        #plt.ylabel("Frequency")
+
+        plt.xlabel(param)
+        plt.ylabel("Number of units")
+
         plt.grid(True, alpha=0.3)
         plt.legend()
         
@@ -258,15 +309,18 @@ def create_histogram_plots(excel_data, plot_config, save_folder='.'):
     
     return plots_created
 
+# --- ADVANCED PLOTS: Fix GD Curve Y-axis auto-scaling if needed ---
 def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_folder='.'):
     plots_created = []
+
 
     # -------- Group Delay Plot --------
     def phase_and_gd(network):
         f_hz = network.frequency.f  # Hz
         ang = np.unwrap(np.angle(network.s[:, 1, 0]))  # S21 phase
         df = np.gradient(f_hz)
-        gd_s = -np.gradient(ang) / (2 * np.pi * df)
+        # Avoid division by zero or very small df if frequency points are identical
+        gd_s = -np.gradient(ang) / (2 * np.pi * (df + 1e-12)) # Add small epsilon to prevent division by zero
         return ang, gd_s * 1e9  # ns
 
     plt.figure(figsize=(12, 6))
@@ -276,6 +330,29 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
             _, gd_ns = phase_and_gd(nt_shift)
             plt.plot(nt_shift.frequency.f / 1e6, gd_ns, alpha=.7, label=f"{fname} {s:+.1f} MHz" if s != 0 else fname)
 
+    # Add GD spec limits
+    gd_colors = ['purple', 'darkviolet', 'magenta']
+    if 'GD' in kpi_config['KPIs']:
+        for i, gd_spec in enumerate(kpi_config['KPIs']['GD']):
+            freq_start_hz = gd_spec['range'][0]
+            freq_end_hz = gd_spec['range'][1]
+            freq_start_mhz = freq_start_hz / 1e6
+            freq_end_mhz = freq_end_hz / 1e6
+            color = gd_colors[i % len(gd_colors)]
+            
+            freq_range_mhz = np.linspace(freq_start_mhz, freq_end_mhz, 100)
+            if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+                if 'USL' in gd_spec:
+                    plt.plot(freq_range_mhz, [gd_spec['USL']] * len(freq_range_mhz), 
+                            color=color, linestyle='--', linewidth=2, 
+                            label=f'{gd_spec["name"]} USL: {gd_spec["USL"]} ns')
+                if 'LSL' in gd_spec:
+                    plt.plot(freq_range_mhz, [gd_spec['LSL']] * len(freq_range_mhz), 
+                            color=color, linestyle=':', linewidth=2, 
+                            label=f'{gd_spec["name"]} LSL: {gd_spec["LSL"]} ns')
+            plt.axvspan(freq_start_mhz, freq_end_mhz, alpha=0.05, color=color)
+
+
     cfg = plot_config['axis_ranges']['advanced_plots']['group_delay']
     plt.xlim(cfg['x_axis']['min'], cfg['x_axis']['max'])
     plt.ylim(cfg['y_axis']['min'], cfg['y_axis']['max'])
@@ -283,7 +360,7 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
     plt.ylabel("GD (ns)")
     plt.title("Group Delay (continuous)")
     plt.grid(True, alpha=.3)
-    plt.legend(bbox_to_anchor=(1.05, 1))
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     gd_plot = os.path.join(save_folder, "GD_Curve.png")
     plt.savefig(gd_plot, dpi=300)
@@ -314,6 +391,30 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
                 label = f"{fname} {s:+.1f} MHz" if s != 0 else fname
                 plt.plot(f_band_mhz, lpd_normalized, alpha=.7, label=label)
 
+    # LPD Spec lines (MIN and MAX)
+    lpd_colors = ['red', 'darkred', 'crimson', 'orange', 'darkorange', 'orangered']
+    color_index = 0
+    for i, lpd_spec in enumerate(kpi_config['KPIs'].get('LPD_MIN', [])):
+        freq_start = lpd_spec['range'][0] / 1e6
+        freq_end = lpd_spec['range'][1] / 1e6
+        lsl_value = lpd_spec['LSL']
+        color = lpd_colors[color_index % len(lpd_colors)]
+        color_index += 1
+        freq_range = np.linspace(freq_start, freq_end, 100)
+        if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+            plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{lpd_spec["name"]} LSL: {lpd_spec["LSL"]} deg')
+        plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+    for i, lpd_spec in enumerate(kpi_config['KPIs'].get('LPD_MAX', [])):
+        freq_start = lpd_spec['range'][0] / 1e6
+        freq_end = lpd_spec['range'][1] / 1e6
+        usl_value = lpd_spec['USL']
+        color = lpd_colors[color_index % len(lpd_colors)]
+        color_index += 1
+        freq_range = np.linspace(freq_start, freq_end, 100)
+        if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+            plt.plot(freq_range, [usl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{lpd_spec["name"]} USL: {lpd_spec["USL"]} deg')
+        plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+
     cfg = plot_config['axis_ranges']['advanced_plots']['linear_phase_deviation']
     plt.xlim(cfg['x_axis']['min'], cfg['x_axis']['max'])
     plt.ylim(0, 4)
@@ -332,7 +433,7 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
     plt.figure(figsize=(12, 6))
     colors = ['blue', 'red', 'green', 'orange', 'purple']
 
-    for band_idx, band in enumerate(kpi_config['KPIs']['Flat']):
+    for band_idx, band in enumerate(kpi_config['KPIs'].get('Flat', [])):
         lo, hi = band['range']
         unit_numbers = []
         flatness_values = []
@@ -351,9 +452,9 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
             unit_num += 1
 
         plt.scatter(unit_numbers, flatness_values, color=colors[band_idx % len(colors)], alpha=0.7, s=50, label=f"{band['name']} ({lo / 1e6:.0f}-{hi / 1e6:.0f} MHz)")
-
-        if 'USL' in band:
-            plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} dB")
+        if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+            if 'USL' in band:
+                plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} dB")
 
     plt.xlabel("Unit Number")
     plt.ylabel("Flatness (dB)")
@@ -368,7 +469,7 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
 
     # -------- GD Variation Scatter Plot --------
     plt.figure(figsize=(12, 6))
-    for band_idx, band in enumerate(kpi_config['KPIs']['GDV']):
+    for band_idx, band in enumerate(kpi_config['KPIs'].get('GDV', [])):
         lo, hi = band['range']
         unit_numbers = []
         gdv_values = []
@@ -387,9 +488,9 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
             unit_num += 1
 
         plt.scatter(unit_numbers, gdv_values, color=colors[band_idx % len(colors)], alpha=0.7, s=50, label=f"{band['name']} ({lo / 1e6:.0f}-{hi / 1e6:.0f} MHz)")
-
-        if 'USL' in band:
-            plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} ns")
+        if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
+            if 'USL' in band:
+                plt.axhline(y=band['USL'], color=colors[band_idx % len(colors)], linestyle='--', alpha=0.5, label=f"{band['name']} USL: {band['USL']} ns")
 
     plt.xlabel("Unit Number")
     plt.ylabel("GD Variation (ns)")

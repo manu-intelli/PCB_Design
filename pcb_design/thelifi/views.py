@@ -40,30 +40,13 @@ from .plotGeneration import (
     generate_statistical_and_histogram_plots_only
 )
 from .serializers import FilterSubmissionSerializer
-
 class FilterUploadView(APIView):
-    """
-    Upload model details with multiple S2P and Simulation files.
-    Creates a submission record and stores files in a unique folder.
-    """
     parser_classes = [MultiPartParser, FormParser]
 
-    @swagger_auto_schema(
-        operation_description="Upload model details with multiple S2P and Simulation files.",
-        manual_parameters=[
-            openapi.Parameter('model_number', openapi.IN_FORM, description="Model Number", type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('edu_number', openapi.IN_FORM, description="EDU Number", type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('filter_type', openapi.IN_FORM, description="Filter Type", type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('s2p_files', openapi.IN_FORM, description="S2P Files (multiple files, use same key multiple times)", type=openapi.TYPE_FILE, required=True),
-            openapi.Parameter('simulation_files', openapi.IN_FORM, description="Simulation Files (multiple files, use same key multiple times)", type=openapi.TYPE_FILE, required=False),
-        ],
-        responses={201: "Files uploaded successfully", 400: "Bad Request"}
-    )
+    @swagger_auto_schema(...)
     def post(self, request):
-        """
-        Handle file upload and submission creation.
-        """
         try:
+            user = request.user  # 👈 Get logged-in user
             model_number = request.data.get('model_number')
             edu_number = request.data.get('edu_number')
             filter_type = request.data.get('filter_type')
@@ -73,6 +56,17 @@ class FilterUploadView(APIView):
             if not (model_number and edu_number and filter_type and s2p_files):
                 thelifi_logs.warning("Upload failed: Missing required fields.")
                 return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # ✅ Check if user already has a record
+            existing_record = FilterSubmission.objects.filter(user=user).first()
+            if existing_record:
+                # Delete the folder
+                folder_path = os.path.join(settings.MEDIA_ROOT, 'uploads', existing_record.folder_name)
+                if os.path.exists(folder_path):
+                    shutil.rmtree(folder_path)
+
+                # Delete the database record
+                existing_record.delete()
 
             folder_name = f"{model_number}_{edu_number}_{uuid.uuid4().hex[:6]}"
             base_path = os.path.join(settings.MEDIA_ROOT, 'uploads', folder_name)
@@ -97,6 +91,7 @@ class FilterUploadView(APIView):
                         destination.write(chunk)
 
             submission = FilterSubmission.objects.create(
+                user=user,  # 👈 Add user to the record
                 folder_name=folder_name,
                 model_number=model_number,
                 edu_number=edu_number,
@@ -105,6 +100,7 @@ class FilterUploadView(APIView):
 
             thelifi_logs.info(f"Files uploaded for submission_id={submission.id}, folder={folder_name}")
             return Response({"message": "Files uploaded successfully.", "submission_id": submission.id, "folder_name": folder_name}, status=status.HTTP_201_CREATED)
+
         except Exception as e:
             thelifi_logs.error(f"Error in FilterUploadView: {str(e)}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
