@@ -161,7 +161,7 @@ class KPI_CalculationAPIView(APIView):
         Generate summary Excel file for KPIs.
         """
         records = []
-        s2p_files = glob.glob(os.path.join(s2p_folder, 'U*.s2p'))
+        s2p_files = glob.glob(os.path.join(s2p_folder, '*.s2p'))
 
         if not s2p_files:
             thelifi_logs.error("No U*.s2p files found in the provided folder.")

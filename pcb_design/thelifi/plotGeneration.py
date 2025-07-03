@@ -94,6 +94,135 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
 
     # ----------- SPECLINE BLOCKS -----------
     if param_type == 'S11':
+                      
+        #-----------------------------------Sigma code start
+        # Add sigma curves for measurements if enabled
+        if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+            # Calculate measurement statistics for S11
+            print("Calculating S11 sigma curves...")
+            
+            # Get all frequency points (use first network as reference)
+            first_network = list(networks.values())[0]
+            ref_freq_hz = first_network.frequency.f
+            ref_freq_mhz = ref_freq_hz / 1e6
+            
+            # Collect S11 data from all networks at each frequency
+            s11_data_collection = []
+            for filename, network in networks.items():
+                # Always use 0 MHz shift for sigma calculations (original frequencies)
+                shifted_net = apply_frequency_shift(network, 0)
+                
+                # Interpolate to reference frequency grid if needed
+                if len(shifted_net.frequency.f) == len(ref_freq_hz):
+                    s11_db = 20 * np.log10(np.abs(shifted_net.s[:, 0, 0]))
+                    s11_data_collection.append(s11_db)
+                else:
+                    # Interpolate to common frequency grid
+                    freq_mhz = shifted_net.frequency.f / 1e6
+                    s11_db = 20 * np.log10(np.abs(shifted_net.s[:, 0, 0]))
+                    s11_interp = np.interp(ref_freq_mhz, freq_mhz, s11_db)
+                    s11_data_collection.append(s11_interp)
+            
+            if len(s11_data_collection) > 1:  # Need at least 2 measurements for statistics
+                # Convert to numpy array for statistics
+                s11_array = np.array(s11_data_collection)
+                
+                # Calculate mean and std at each frequency point
+                s11_mean = np.mean(s11_array, axis=0)
+                s11_std = np.std(s11_array, axis=0, ddof=1)  # Sample standard deviation
+                
+                # Plot sigma curves for each enabled sigma value
+                sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+                sigma_styles = ['-', '--', ':']  # Different line styles
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sigma_colors[i % len(sigma_colors)]
+                    style = sigma_styles[i % len(sigma_styles)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    s11_upper = s11_mean + sigma_val * s11_std
+                    s11_lower = s11_mean - sigma_val * s11_std
+                    
+                    # Plot sigma curves
+                    plt.plot(ref_freq_mhz, s11_upper, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ S11')
+                    plt.plot(ref_freq_mhz, s11_lower, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ S11')
+                    
+                    # Optional: Add mean line
+                    if i == 0:  # Only add mean line once
+                        plt.plot(ref_freq_mhz, s11_mean, color='black', linestyle='-', 
+                                linewidth=2, alpha=0.9, label='Mean S11')
+            
+            else:
+                print("Warning: Need at least 2 measurement files for sigma calculations")
+        #-----------------------------------Sigma code end
+
+
+        # Add simulation overlay if available
+        if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s11_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 0, 0]))
+            plt.plot(sim_freq_mhz, sim_s11_db, 'r--', linewidth=2, label='Simulation Nominal')
+
+
+        #---------------------Simulation S11 Start ----------------------
+        # Add simulation sigma curves if available and enabled
+        if (sim_data and 'nominal' in sim_data and 's11_sigma' in sim_data and 
+            plot_config['simulation_settings']['include_simulation'] and 
+            plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']):
+            
+            print("Adding S11 simulation sigma curves...")
+            
+            # Get simulation nominal data
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s11_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 0, 0]))
+            
+            # Get simulation sigma data
+            s11_sigma_df = sim_data['s11_sigma']
+            
+            # Interpolate sigma data to simulation frequency grid
+            if 'Freq (MHz)' in s11_sigma_df.columns and any('stdev' in col for col in s11_sigma_df.columns):
+                # Find the stdev column (handles variations like 'stdevS11 (dB)', 'stdev', etc.)
+                stdev_col = next(col for col in s11_sigma_df.columns if 'stdev' in col.lower())
+                
+                # Interpolate sigma values to simulation frequency grid
+                sigma_freq_mhz = s11_sigma_df['Freq (MHz)'].values
+                sigma_stdev_db = s11_sigma_df[stdev_col].values
+                
+                # Interpolate sigma data to match simulation frequency points
+                sim_s11_sigma = np.interp(sim_freq_mhz, sigma_freq_mhz, sigma_stdev_db)
+                
+                # Plot simulation sigma curves
+                sim_sigma_colors = ['purple', 'darkviolet', 'mediumorchid']  # Purple family
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sim_sigma_colors[i % len(sim_sigma_colors)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    sim_s11_upper = sim_s11_db + sigma_val * sim_s11_sigma
+                    sim_s11_lower = sim_s11_db - sigma_val * sim_s11_sigma
+                    
+                    # Plot simulation sigma curves with dashed style
+                    plt.plot(sim_freq_mhz, sim_s11_upper, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean+{sigma_val}σ S11')
+                    plt.plot(sim_freq_mhz, sim_s11_lower, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean-{sigma_val}σ S11')
+            
+            else:
+                print("Warning: S11 sigma data format not recognized. Expected 'Freq (MHz)' and 'stdev*' columns.")
+            
+            #---------------------Simulation S11 End ----------------------
+
+
+
+        #Specline
         rl_colors = ['red', 'darkred', 'crimson']
         for i, rl_spec in enumerate(kpi_config['KPIs'].get('RL', [])):
             freq_start = rl_spec['range'][0] / 1e6
@@ -104,7 +233,85 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
             if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
                 plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{rl_spec["name"]} LSL: {lsl_value} dB')
             plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+
+
     elif param_type == 'S22':
+
+        #-------------------------------Insert 3 Start-------------------------
+        #-----------------------Sigma code start---------------------------
+        # Add sigma curves for S22 measurements if enabled
+        if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+            # Calculate measurement statistics for S22
+            print("Calculating S22 sigma curves...")
+            
+            # Get all frequency points (use first network as reference)
+            first_network = list(networks.values())[0]
+            ref_freq_hz = first_network.frequency.f
+            ref_freq_mhz = ref_freq_hz / 1e6
+            
+            # Collect S22 data from all networks at each frequency
+            s22_data_collection = []
+            for filename, network in networks.items():
+                # Always use 0 MHz shift for sigma calculations (original frequencies)
+                shifted_net = apply_frequency_shift(network, 0)
+                
+                # Interpolate to reference frequency grid if needed
+                if len(shifted_net.frequency.f) == len(ref_freq_hz):
+                    s22_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 1]))
+                    s22_data_collection.append(s22_db)
+                else:
+                    # Interpolate to common frequency grid
+                    freq_mhz = shifted_net.frequency.f / 1e6
+                    s22_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 1]))
+                    s22_interp = np.interp(ref_freq_mhz, freq_mhz, s22_db)
+                    s22_data_collection.append(s22_interp)
+            
+            if len(s22_data_collection) > 1:  # Need at least 2 measurements for statistics
+                # Convert to numpy array for statistics
+                s22_array = np.array(s22_data_collection)
+                
+                # Calculate mean and std at each frequency point
+                s22_mean = np.mean(s22_array, axis=0)
+                s22_std = np.std(s22_array, axis=0, ddof=1)  # Sample standard deviation
+                
+                # Plot sigma curves for each enabled sigma value
+                sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+                sigma_styles = ['-', '--', ':']  # Different line styles
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sigma_colors[i % len(sigma_colors)]
+                    style = sigma_styles[i % len(sigma_styles)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    s22_upper = s22_mean + sigma_val * s22_std
+                    s22_lower = s22_mean - sigma_val * s22_std
+                    
+                    # Plot sigma curves
+                    plt.plot(ref_freq_mhz, s22_upper, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ S22')
+                    plt.plot(ref_freq_mhz, s22_lower, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ S22')
+                    
+                    # Optional: Add mean line
+                    if i == 0:  # Only add mean line once
+                        plt.plot(ref_freq_mhz, s22_mean, color='black', linestyle='-', 
+                                linewidth=2, alpha=0.9, label='Mean S22')
+            
+            else:
+                print("Warning: Need at least 2 measurement files for sigma calculations")
+        #---------------Sigma End -----------------
+        #This can be removed Because Simulation S11, S21 Insertion and Rejection
+        # Add simulation overlay if available
+        if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s22_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 1]))
+            plt.plot(sim_freq_mhz, sim_s22_db, 'r--', linewidth=2, label='Simulation Nominal')
+        #-------------------------------Insert 3 End-------------------------
+        
+
         rl_colors = ['red', 'darkred', 'crimson']
         for i, rl_spec in enumerate(kpi_config['KPIs'].get('RL', [])):
             freq_start = rl_spec['range'][0] / 1e6
@@ -115,7 +322,138 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
             if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
                 plt.plot(freq_range, [lsl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{rl_spec["name"]} LSL: {lsl_value} dB')
             plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+
     elif param_type == 'S21' and plot_filename == 'S21_Insertion_Loss.png':
+
+        #--------------------------------Insert 4 Start -----------------------
+        # Order is Plot - Sigma - Simulation - Spec
+
+        #--------------------------------------Sigma s21 start
+        # Add sigma curves for S21 insertion loss measurements if enabled
+        if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+            # Calculate measurement statistics for S21 insertion loss
+            print("Calculating S21 insertion loss sigma curves...")
+            
+            # Get all frequency points (use first network as reference)
+            first_network = list(networks.values())[0]
+            ref_freq_hz = first_network.frequency.f
+            ref_freq_mhz = ref_freq_hz / 1e6
+            
+            # Collect S21 data from all networks at each frequency
+            s21_il_data_collection = []
+            for filename, network in networks.items():
+                # Always use 0 MHz shift for sigma calculations (original frequencies)
+                shifted_net = apply_frequency_shift(network, 0)
+                
+                # Interpolate to reference frequency grid if needed
+                if len(shifted_net.frequency.f) == len(ref_freq_hz):
+                    s21_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 0]))
+                    s21_il_data_collection.append(s21_db)
+                else:
+                    # Interpolate to common frequency grid
+                    freq_mhz = shifted_net.frequency.f / 1e6
+                    s21_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 0]))
+                    s21_interp = np.interp(ref_freq_mhz, freq_mhz, s21_db)
+                    s21_il_data_collection.append(s21_interp)
+            
+            if len(s21_il_data_collection) > 1:  # Need at least 2 measurements for statistics
+                # Convert to numpy array for statistics
+                s21_il_array = np.array(s21_il_data_collection)
+                
+                # Calculate mean and std at each frequency point
+                s21_il_mean = np.mean(s21_il_array, axis=0)
+                s21_il_std = np.std(s21_il_array, axis=0, ddof=1)  # Sample standard deviation
+                
+                # Plot sigma curves for each enabled sigma value
+                sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+                sigma_styles = ['-', '--', ':']  # Different line styles
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sigma_colors[i % len(sigma_colors)]
+                    style = sigma_styles[i % len(sigma_styles)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    s21_il_upper = s21_il_mean + sigma_val * s21_il_std
+                    s21_il_lower = s21_il_mean - sigma_val * s21_il_std
+                    
+                    # Plot sigma curves
+                    plt.plot(ref_freq_mhz, s21_il_upper, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ S21 IL')
+                    plt.plot(ref_freq_mhz, s21_il_lower, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ S21 IL')
+                    
+                    # Optional: Add mean line
+                    if i == 0:  # Only add mean line once
+                        plt.plot(ref_freq_mhz, s21_il_mean, color='black', linestyle='-', 
+                                linewidth=2, alpha=0.9, label='Mean S21 IL')
+            
+            else:
+                print("Warning: Need at least 2 measurement files for sigma calculations")
+            #---------------Sigma End-----------------
+
+          
+
+        # Add simulation overlay if available
+        if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s21_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
+            plt.plot(sim_freq_mhz, sim_s21_db, 'r--', linewidth=2, label='Simulation Nominal')
+        
+        # Add simulation sigma curves if available and enabled
+        if (sim_data and 'nominal' in sim_data and 's21_sigma' in sim_data and 
+            plot_config['simulation_settings']['include_simulation'] and 
+            plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']):
+            
+            print("Adding S21 insertion loss simulation sigma curves...")
+            
+            # Get simulation nominal data
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s21_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
+            
+            # Get simulation sigma data
+            s21_sigma_df = sim_data['s21_sigma']
+            
+            # Interpolate sigma data to simulation frequency grid
+            if 'Freq (MHz)' in s21_sigma_df.columns and any('stdev' in col for col in s21_sigma_df.columns):
+                # Find the stdev column (handles variations like 'stdevS21 (dB)', 'stdev', etc.)
+                stdev_col = next(col for col in s21_sigma_df.columns if 'stdev' in col.lower())
+                
+                # Interpolate sigma values to simulation frequency grid
+                sigma_freq_mhz = s21_sigma_df['Freq (MHz)'].values
+                sigma_stdev_db = s21_sigma_df[stdev_col].values
+                
+                # Interpolate sigma data to match simulation frequency points
+                sim_s21_sigma = np.interp(sim_freq_mhz, sigma_freq_mhz, sigma_stdev_db)
+                
+                # Plot simulation sigma curves
+                sim_sigma_colors = ['purple', 'darkviolet', 'mediumorchid']  # Purple family
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sim_sigma_colors[i % len(sim_sigma_colors)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    sim_s21_upper = sim_s21_db + sigma_val * sim_s21_sigma
+                    sim_s21_lower = sim_s21_db - sigma_val * sim_s21_sigma
+                    
+                    # Plot simulation sigma curves with dashed style
+                    plt.plot(sim_freq_mhz, sim_s21_upper, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean+{sigma_val}σ S21 IL')
+                    plt.plot(sim_freq_mhz, sim_s21_lower, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean-{sigma_val}σ S21 IL')
+            
+            else:
+                print("Warning: S21 sigma data format not recognized. Expected 'Freq (MHz)' and 'stdev*' columns.")
+    
+        #-------------------------------Insert 4 End-----------------------------
+
+
+
         il_colors = ['green', 'darkgreen', 'lime']
         for i, il_spec in enumerate(kpi_config['KPIs'].get('IL', [])):
             freq_start = il_spec['range'][0] / 1e6
@@ -126,7 +464,138 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
             if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
                 plt.plot(freq_range, [usl_value] * len(freq_range), color=color, linestyle='--', linewidth=2, label=f'{il_spec["name"]} USL: {usl_value} dB')
             plt.axvspan(freq_start, freq_end, alpha=0.05, color=color)
+
     elif param_type == 'S21' and plot_filename == 'S21_Rejection_Loss.png':
+
+        #---------------------------Insert 5 Start---------------------------
+
+        # Add sigma curves for S21 rejection loss measurements if enabled
+        #---------------Sigma Rejection Loss Start-----------------
+        if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+            # Calculate measurement statistics for S21 rejection loss
+            print("Calculating S21 rejection loss sigma curves...")
+            
+            # Get all frequency points (use first network as reference)
+            first_network = list(networks.values())[0]
+            ref_freq_hz = first_network.frequency.f
+            ref_freq_mhz = ref_freq_hz / 1e6
+            
+            # Collect S21 data from all networks at each frequency
+            s21_rej_data_collection = []
+            for filename, network in networks.items():
+                # Always use 0 MHz shift for sigma calculations (original frequencies)
+                shifted_net = apply_frequency_shift(network, 0)
+                
+                # Interpolate to reference frequency grid if needed
+                if len(shifted_net.frequency.f) == len(ref_freq_hz):
+                    s21_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 0]))
+                    s21_rej_data_collection.append(s21_db)
+                else:
+                    # Interpolate to common frequency grid
+                    freq_mhz = shifted_net.frequency.f / 1e6
+                    s21_db = 20 * np.log10(np.abs(shifted_net.s[:, 1, 0]))
+                    s21_interp = np.interp(ref_freq_mhz, freq_mhz, s21_db)
+                    s21_rej_data_collection.append(s21_interp)
+            
+            if len(s21_rej_data_collection) > 1:  # Need at least 2 measurements for statistics
+                # Convert to numpy array for statistics
+                s21_rej_array = np.array(s21_rej_data_collection)
+                
+                # Calculate mean and std at each frequency point
+                s21_rej_mean = np.mean(s21_rej_array, axis=0)
+                s21_rej_std = np.std(s21_rej_array, axis=0, ddof=1)  # Sample standard deviation
+                
+                # Plot sigma curves for each enabled sigma value
+                sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+                sigma_styles = ['-', '--', ':']  # Different line styles
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sigma_colors[i % len(sigma_colors)]
+                    style = sigma_styles[i % len(sigma_styles)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    s21_rej_upper = s21_rej_mean + sigma_val * s21_rej_std
+                    s21_rej_lower = s21_rej_mean - sigma_val * s21_rej_std
+                    
+                    # Plot sigma curves
+                    plt.plot(ref_freq_mhz, s21_rej_upper, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ S21 Rej')
+                    plt.plot(ref_freq_mhz, s21_rej_lower, color=color, linestyle=style, 
+                            linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ S21 Rej')
+                    
+                    # Optional: Add mean line
+                    if i == 0:  # Only add mean line once
+                        plt.plot(ref_freq_mhz, s21_rej_mean, color='black', linestyle='-', 
+                                linewidth=2, alpha=0.9, label='Mean S21 Rej')
+            
+            else:
+                print("Warning: Need at least 2 measurement files for sigma calculations")
+
+        #---------------Sigma Rejection Loss End-----------------
+
+        
+        
+        # Add simulation overlay if available
+        if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s21_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
+            plt.plot(sim_freq_mhz, sim_s21_db, 'r--', linewidth=2, label='Simulation Nominal')
+
+
+        # Add simulation sigma curves if available and enabled
+        if (sim_data and 'nominal' in sim_data and 's21_sigma' in sim_data and 
+            plot_config['simulation_settings']['include_simulation'] and 
+            plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']):
+            
+            print("Adding S21 rejection loss simulation sigma curves...")
+            
+            # Get simulation nominal data
+            sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
+            sim_s21_db = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
+            
+            # Get simulation sigma data
+            s21_sigma_df = sim_data['s21_sigma']
+            
+            # Interpolate sigma data to simulation frequency grid
+            if 'Freq (MHz)' in s21_sigma_df.columns and any('stdev' in col for col in s21_sigma_df.columns):
+                # Find the stdev column (handles variations like 'stdevS21 (dB)', 'stdev', etc.)
+                stdev_col = next(col for col in s21_sigma_df.columns if 'stdev' in col.lower())
+                
+                # Interpolate sigma values to simulation frequency grid
+                sigma_freq_mhz = s21_sigma_df['Freq (MHz)'].values
+                sigma_stdev_db = s21_sigma_df[stdev_col].values
+                
+                # Interpolate sigma data to match simulation frequency points
+                sim_s21_sigma = np.interp(sim_freq_mhz, sigma_freq_mhz, sigma_stdev_db)
+                
+                # Plot simulation sigma curves
+                sim_sigma_colors = ['purple', 'darkviolet', 'mediumorchid']  # Purple family
+                
+                for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                    if i >= 3:  # Max 3 sigma values
+                        break
+                        
+                    color = sim_sigma_colors[i % len(sim_sigma_colors)]
+                    
+                    # Calculate upper and lower sigma bounds
+                    sim_s21_upper = sim_s21_db + sigma_val * sim_s21_sigma
+                    sim_s21_lower = sim_s21_db - sigma_val * sim_s21_sigma
+                    
+                    # Plot simulation sigma curves with dashed style
+                    plt.plot(sim_freq_mhz, sim_s21_upper, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean+{sigma_val}σ S21 Rej')
+                    plt.plot(sim_freq_mhz, sim_s21_lower, color=color, linestyle='-.', 
+                            linewidth=2, alpha=0.8, label=f'Sim Mean-{sigma_val}σ S21 Rej')
+            
+            else:
+                print("Warning: S21 sigma data format not recognized. Expected 'Freq (MHz)' and 'stdev*' columns.")
+
+        #---------------------------Insert 5 End-----------------------------
+
+
         rej_colors = ['orange', 'purple', 'brown', 'pink']
         for i, sb_spec in enumerate(kpi_config.get('StopBands', [])):
             freq_start = sb_spec['range'][0] / 1e6
@@ -140,15 +609,19 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
 
     # ----------- END SPECLINE BLOCKS -----------
 
+    #----------------------------------------Insert 6 Start below code block to be commented This handled in each if blocks above-------------------------
+    """
     if sim_data and 'nominal' in sim_data and plot_config['simulation_settings']['include_simulation']:
         sim_freq_mhz = sim_data['nominal'].frequency.f / 1e6
         if param_type == 'S11':
-            sim_y_values = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 0, 0]))
+            #sim_y_values = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 0, 0]))
         elif param_type == 'S22':
             sim_y_values = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 1]))
         elif param_type == 'S21':
             sim_y_values = 20 * np.log10(np.abs(sim_data['nominal'].s[:, 1, 0]))
         plt.plot(sim_freq_mhz, sim_y_values, 'r--', linewidth=2, label='Simulation Nominal')
+    """
+    #----------------------------------------Insert 6 End -------------------------
 
     config = s_param_config[param_type.lower() + '_return_loss' if param_type != 'S21' else ('s21_insertion_loss' if plot_filename == 'S21_Insertion_Loss.png' else 's21_rejection_loss')]
     plt.xlim(config['x_axis']['min'], config['x_axis']['max'])
@@ -169,7 +642,26 @@ def generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, 
 
 def create_s_parameter_plots(networks, plot_config, kpi_config, sim_data=None, save_folder='.'):
     plots_created = []
-    freq_shifts = plot_config['frequency_shifts']['shifts'] if plot_config['frequency_shifts']['enabled'] else [0]
+
+    # PLot has to be plotted without shift always. This code does this check ---- Insert 1 - Start--
+    #freq_shifts = plot_config['frequency_shifts']['shifts'] if plot_config['frequency_shifts']['enabled'] else [0]
+
+
+    # Ensure 0 shift is always included alongside user-specified shifts
+    if plot_config['frequency_shifts']['enabled']:
+        user_shifts = plot_config['frequency_shifts']['shifts']
+        # Always include 0 shift, then add any non-zero user shifts (avoid duplicates)
+        freq_shifts = [0] + [s for s in user_shifts if s != 0]
+        
+        # Enforce max_shifts limit (including the mandatory 0 shift)
+        max_allowed = plot_config['frequency_shifts']['max_shifts']
+        if len(freq_shifts) > max_allowed:
+            print(f"Warning: Too many shifts specified. Using first {max_allowed} shifts including 0.")
+            freq_shifts = freq_shifts[:max_allowed]
+    else:
+        freq_shifts = [0]
+    # PLot has to be plotted without shift always. This code does this check ---- Insert 1 - End--
+
     s_param_config = plot_config['axis_ranges']['s_parameter_plots']
 
     # S11 Return Loss Plot
@@ -185,6 +677,8 @@ def create_s_parameter_plots(networks, plot_config, kpi_config, sim_data=None, s
     plots_created.append(generate_plot(networks, plot_config, sim_data, freq_shifts, s_param_config, kpi_config, 'S21', save_folder, 'S21_Rejection_Loss.png'))
 
     return plots_created
+
+
 def create_statistical_plots(excel_data, plot_config, save_folder='.'):
     """Create individual box plots for each parameter from Excel statistical data and save in the provided folder"""
     plots_created = []
@@ -330,6 +824,77 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
             _, gd_ns = phase_and_gd(nt_shift)
             plt.plot(nt_shift.frequency.f / 1e6, gd_ns, alpha=.7, label=f"{fname} {s:+.1f} MHz" if s != 0 else fname)
 
+    
+    #---------------------------Insert 7 Start - Sigma for GD
+
+    #---------------------Sigma Group Delay Start----------------
+    # Add sigma curves for Group Delay measurements if enabled
+    if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+        # Calculate measurement statistics for Group Delay
+        print("Calculating Group Delay sigma curves...")
+        
+        # Get all frequency points (use first network as reference)
+        first_network = list(networks.values())[0]
+        ref_freq_hz = first_network.frequency.f
+        ref_freq_mhz = ref_freq_hz / 1e6
+        
+        # Collect GD data from all networks at each frequency
+        gd_data_collection = []
+        for filename, network in networks.items():
+            # Always use 0 MHz shift for sigma calculations (original frequencies)
+            shifted_net = apply_frequency_shift(network, 0)
+            
+            # Calculate group delay
+            _, gd_ns = phase_and_gd(shifted_net)
+            
+            # Interpolate to reference frequency grid if needed
+            if len(shifted_net.frequency.f) == len(ref_freq_hz):
+                gd_data_collection.append(gd_ns)
+            else:
+                # Interpolate to common frequency grid
+                freq_mhz = shifted_net.frequency.f / 1e6
+                gd_interp = np.interp(ref_freq_mhz, freq_mhz, gd_ns)
+                gd_data_collection.append(gd_interp)
+        
+        if len(gd_data_collection) > 1:  # Need at least 2 measurements for statistics
+            # Convert to numpy array for statistics
+            gd_array = np.array(gd_data_collection)
+            
+            # Calculate mean and std at each frequency point
+            gd_mean = np.mean(gd_array, axis=0)
+            gd_std = np.std(gd_array, axis=0, ddof=1)  # Sample standard deviation
+            
+            # Plot sigma curves for each enabled sigma value
+            sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+            sigma_styles = ['-', '--', ':']  # Different line styles
+            
+            for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                if i >= 3:  # Max 3 sigma values
+                    break
+                    
+                color = sigma_colors[i % len(sigma_colors)]
+                style = sigma_styles[i % len(sigma_styles)]
+                
+                # Calculate upper and lower sigma bounds
+                gd_upper = gd_mean + sigma_val * gd_std
+                gd_lower = gd_mean - sigma_val * gd_std
+                
+                # Plot sigma curves
+                plt.plot(ref_freq_mhz, gd_upper, color=color, linestyle=style, 
+                        linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ GD')
+                plt.plot(ref_freq_mhz, gd_lower, color=color, linestyle=style, 
+                        linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ GD')
+                
+                # Optional: Add mean line
+                if i == 0:  # Only add mean line once
+                    plt.plot(ref_freq_mhz, gd_mean, color='black', linestyle='-', 
+                            linewidth=2, alpha=0.9, label='Mean GD')
+        
+        else:
+            print("Warning: Need at least 2 measurement files for sigma calculations")
+    #---------------------Sigma Group Delay End----------------
+    #---------------------------Insert 7 End
+
     # Add GD spec limits
     gd_colors = ['purple', 'darkviolet', 'magenta']
     if 'GD' in kpi_config['KPIs']:
@@ -340,6 +905,7 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
             freq_end_mhz = freq_end_hz / 1e6
             color = gd_colors[i % len(gd_colors)]
             
+            #---- Question gd will have one USL. Why both?? LSL can be removed
             freq_range_mhz = np.linspace(freq_start_mhz, freq_end_mhz, 100)
             if plot_config.get('plot_settings', {}).get('show_spec_lines', False):
                 if 'USL' in gd_spec:
@@ -391,6 +957,108 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
                 label = f"{fname} {s:+.1f} MHz" if s != 0 else fname
                 plt.plot(f_band_mhz, lpd_normalized, alpha=.7, label=label)
 
+    #------------------------Insert 8 LPD Sigma Start----------------------------
+
+    if plot_config['sigma_settings']['enabled'] and plot_config['sigma_settings']['sigma_values']:
+        # Calculate measurement statistics for Linear Phase Deviation
+        print("Calculating Linear Phase Deviation sigma curves...")
+        
+        # Define the measurement band for LPD calculation
+        LPD_FREQ_LOW, LPD_FREQ_HIGH = kpi_config['KPIs']['LPD_MIN'][0]['range']
+        
+        # Get all frequency points (use first network as reference)
+        first_network = list(networks.values())[0]
+        ref_freq_hz = first_network.frequency.f
+        ref_freq_mhz = ref_freq_hz / 1e6
+        
+        # Filter to measurement band
+        mask = (ref_freq_hz >= LPD_FREQ_LOW) & (ref_freq_hz <= LPD_FREQ_HIGH)
+        ref_freq_band_hz = ref_freq_hz[mask]
+        ref_freq_band_mhz = ref_freq_band_hz / 1e6
+        
+        # Collect LPD data from all networks at each frequency
+        lpd_data_collection = []
+        for filename, network in networks.items():
+            # Always use 0 MHz shift for sigma calculations (original frequencies)
+            shifted_net = apply_frequency_shift(network, 0)
+            
+            # Calculate LPD
+            phase, _ = phase_and_gd(shifted_net)
+            f_hz = shifted_net.frequency.f
+            
+            # Only fit linear phase over the measurement band
+            net_mask = (f_hz >= LPD_FREQ_LOW) & (f_hz <= LPD_FREQ_HIGH)
+            
+            if np.sum(net_mask) > 2:  # Need at least 3 points for fitting
+                # Fit linear phase only over the measurement band
+                f_fit = f_hz[net_mask]
+                phase_fit = phase[net_mask]
+                
+                # Linear least squares fit over measurement band only
+                A = np.vstack([f_fit, np.ones_like(f_fit)]).T
+                slope, intercept = np.linalg.lstsq(A, phase_fit, rcond=None)[0]
+                
+                # Calculate linear phase for all frequencies using the fit parameters
+                linear_phase = slope * f_hz + intercept
+                
+                # Calculate phase deviation
+                phase_deviation_rad = phase - linear_phase
+                phase_deviation_deg = np.degrees(phase_deviation_rad)
+                
+                # Extract only the measurement band
+                lpd_band = phase_deviation_deg[net_mask]
+                
+                # Interpolate to reference frequency grid if needed
+                if len(f_hz[net_mask]) == len(ref_freq_band_hz):
+                    lpd_data_collection.append(lpd_band)
+                else:
+                    # Interpolate to common frequency grid
+                    freq_band_mhz = f_hz[net_mask] / 1e6
+                    lpd_interp = np.interp(ref_freq_band_mhz, freq_band_mhz, lpd_band)
+                    lpd_data_collection.append(lpd_interp)
+        
+        if len(lpd_data_collection) > 1:  # Need at least 2 measurements for statistics
+            # Convert to numpy array for statistics
+            lpd_array = np.array(lpd_data_collection)
+            
+            # Calculate mean and std at each frequency point
+            lpd_mean = np.mean(lpd_array, axis=0)
+            lpd_std = np.std(lpd_array, axis=0, ddof=1)  # Sample standard deviation
+            
+            # Plot sigma curves for each enabled sigma value
+            sigma_colors = ['purple', 'orange', 'brown']  # Different colors for different sigma values
+            sigma_styles = ['-', '--', ':']  # Different line styles
+            
+            for i, sigma_val in enumerate(plot_config['sigma_settings']['sigma_values']):
+                if i >= 3:  # Max 3 sigma values
+                    break
+                    
+                color = sigma_colors[i % len(sigma_colors)]
+                style = sigma_styles[i % len(sigma_styles)]
+                
+                # Calculate upper and lower sigma bounds
+                lpd_upper = lpd_mean + sigma_val * lpd_std
+                lpd_lower = lpd_mean - sigma_val * lpd_std
+                
+                # Plot sigma curves
+                plt.plot(ref_freq_band_mhz, lpd_upper, color=color, linestyle=style, 
+                        linewidth=1.5, alpha=0.8, label=f'Mean+{sigma_val}σ LPD')
+                plt.plot(ref_freq_band_mhz, lpd_lower, color=color, linestyle=style, 
+                        linewidth=1.5, alpha=0.8, label=f'Mean-{sigma_val}σ LPD')
+                
+                # Optional: Add mean line
+                if i == 0:  # Only add mean line once
+                    plt.plot(ref_freq_band_mhz, lpd_mean, color='black', linestyle='-', 
+                            linewidth=2, alpha=0.9, label='Mean LPD')
+        
+    else:
+        print("Warning: Need at least 2 measurement files for sigma calculations")
+    
+    #---------------LPD Sigma End-----------------
+
+
+
+    #------------------------Insert 8 LPD Sigma End----------------------------
     # LPD Spec lines (MIN and MAX)
     lpd_colors = ['red', 'darkred', 'crimson', 'orange', 'darkorange', 'orangered']
     color_index = 0
