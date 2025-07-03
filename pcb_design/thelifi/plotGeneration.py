@@ -951,11 +951,15 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
                 slope, intercept = np.linalg.lstsq(A, phase_fit, rcond=None)[0]
                 linear_phase = slope * f_hz + intercept
                 phase_deviation_deg = np.degrees(phase - linear_phase)
+
+                #********
                 lpd_band = phase_deviation_deg[mask]
-                lpd_normalized = lpd_band - lpd_band.min()
+                #lpd_normalized = lpd_band - lpd_band.min()
                 f_band_mhz = f_hz[mask] / 1e6
                 label = f"{fname} {s:+.1f} MHz" if s != 0 else fname
-                plt.plot(f_band_mhz, lpd_normalized, alpha=.7, label=label)
+                #plt.plot(f_band_mhz, lpd_normalized, alpha=.7, label=label)
+                plt.plot(f_band_mhz, lpd_band, alpha=.7, label=label)
+                #********
 
     #------------------------Insert 8 LPD Sigma Start----------------------------
 
@@ -1085,7 +1089,11 @@ def create_advanced_plots(plot_config, kpi_config, networks, freq_shifts, save_f
 
     cfg = plot_config['axis_ranges']['advanced_plots']['linear_phase_deviation']
     plt.xlim(cfg['x_axis']['min'], cfg['x_axis']['max'])
-    plt.ylim(0, 4)
+
+    #*******************
+    #plt.ylim(0, 4)
+    plt.ylim(cfg['y_axis']['min'], cfg['y_axis']['max'])
+    #******************
     plt.xlabel("Frequency (MHz)")
     plt.ylabel("LPD (deg)")
     plt.title("Linear-Phase Deviation (continuous)")
