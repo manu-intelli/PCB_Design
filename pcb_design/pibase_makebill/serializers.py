@@ -475,7 +475,6 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
     }
 
 
-
 class MakeBillRecordSerializer(serializers.ModelSerializer):
     record_id = serializers.SerializerMethodField()
     special_requirements = serializers.JSONField(required=False)
