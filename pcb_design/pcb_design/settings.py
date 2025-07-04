@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'masters',  # Custom app for managing master data
     'pibase',  # Custom app for managing PiBase records
     'pibase_makebill',  # Custom app for managing Make Bill records
+    'thelifi',
 ]
 
 # Middleware configuration
