@@ -36,8 +36,8 @@ from drf_yasg import openapi
 from . import thelifi_logs
 from .models import FilterSubmission
 from .plotGeneration import (
-    generate_s_parameter_plots_only,
-    generate_statistical_and_histogram_plots_only
+    generate_selected_s_parameter_plots,
+    generate_selected_statistical_and_histogram_plots
 )
 from .serializers import FilterSubmissionSerializer
 class FilterUploadView(APIView):
@@ -494,7 +494,7 @@ class SParameterPlotAPIView(APIView):
             generated_plots_folder = os.path.join(folder_full_path, 'Generated_Plots')
             os.makedirs(generated_plots_folder, exist_ok=True)
 
-            generated_plots = generate_s_parameter_plots_only(
+            generated_plots = generate_selected_s_parameter_plots(
                 plot_config_data=plot_config,
                 excel_files=excel_files,
                 s2p_files=s2p_files,
@@ -555,7 +555,7 @@ class StatisticalAndHistogramPlotAPIView(APIView):
             generated_plots_folder = os.path.join(folder_full_path, 'Generated_Plots')
             os.makedirs(generated_plots_folder, exist_ok=True)
 
-            generated_plots = generate_statistical_and_histogram_plots_only(
+            generated_plots = generate_selected_statistical_and_histogram_plots(
                 plot_config_data=plot_config,
                 excel_files=excel_files,
                 save_folder=generated_plots_folder
