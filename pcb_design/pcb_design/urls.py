@@ -44,6 +44,7 @@ urlpatterns = [
     path('masters/', include('masters.urls')),
     path('pibase/', include('pibase.urls')),
     path('makebill/', include('pibase_makebill.urls')),
+    path('thelifi/',include('thelifi.urls')),
     path('custom-page-admin/', admin_site.urls),             # your custom admin (with custom-page)
     path('admin/', admin.site.urls), 
 ]
