@@ -165,6 +165,33 @@ import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from PIL import Image
 
+def extract_unique_ids(all_labels):
+    from os.path import commonprefix
+
+    simplified_labels = []
+
+    # Get only actual file labels, exclude shifts
+    file_labels = [label for label in all_labels if label not in ['+Shift', '-Shift']]
+
+    # Find the common prefix across all file labels
+    common_text = os.path.commonprefix(file_labels)
+
+    for label in all_labels:
+        if label in ['+Shift', '-Shift']:
+            simplified_labels.append(label)
+        else:
+            # Unique part is what comes after the common prefix
+            unique_id = label.replace(common_text, '').strip('_').strip('-').strip()
+
+            # Optional: If the unique part is too big, just take the first 5-6 characters
+            if len(unique_id) > 6:
+                unique_id = unique_id[:6]
+
+            # Take first 4 letters from common text as prefix
+            prefix = common_text[:4]
+            simplified_labels.append(f"{prefix}_{unique_id}")
+
+    return simplified_labels
 
 def generate_s11_return_loss_plot(
     networks, plot_config, kpi_config, sim_data, freq_shifts, save_folder
@@ -193,6 +220,11 @@ def generate_s11_return_loss_plot(
         all_handles.append(line)
         all_labels.append(filename)
 
+
+    # You already have all_labels filled
+    
+
+
         # Plot shifted lines without individual file names
         for shift in freq_shifts:
             if shift == 0:
@@ -218,6 +250,8 @@ def generate_s11_return_loss_plot(
                     all_handles.append(line)
                     all_labels.append("-Shift")
                     negative_shift_plotted = True
+    
+    all_labels = extract_unique_ids(all_labels)
 
     # Sigma curves if enabled
     if (
@@ -419,7 +453,7 @@ def generate_s22_return_loss_plot(networks, plot_config, kpi_config, sim_data, f
                     all_handles.append(line)
                     all_labels.append("-Shift")
                     negative_shift_plotted = True
-
+    all_labels = extract_unique_ids(all_labels)
     # Sigma curves if enabled
     if plot_config["sigma_settings"]["enabled"] and plot_config["sigma_settings"]["sigma_values"]:
         print("Calculating S22 sigma curves...")
@@ -570,7 +604,7 @@ def generate_s21_insertion_loss_plot(networks, plot_config, kpi_config, sim_data
                     all_handles.append(line)
                     all_labels.append("-Shift")
                     negative_shift_plotted = True
-
+    all_labels = extract_unique_ids(all_labels)
     # Sigma curves if enabled
     if plot_config["sigma_settings"]["enabled"] and plot_config["sigma_settings"]["sigma_values"]:
         print("Calculating S21 sigma curves...")
@@ -753,7 +787,7 @@ def generate_s21_rejection_loss_plot(networks, plot_config, kpi_config, sim_data
                     all_handles.append(line)
                     all_labels.append("-Shift")
                     negative_shift_plotted = True
-
+    all_labels = extract_unique_ids(all_labels)
     # Sigma curves if enabled
     if plot_config["sigma_settings"]["enabled"] and plot_config["sigma_settings"]["sigma_values"]:
         print("Calculating S21 rejection loss sigma curves...")
@@ -947,7 +981,7 @@ def generate_group_delay_plot(networks, plot_config, kpi_config, sim_data, freq_
                     all_handles.append(line)
                     all_labels.append("-Shift")
                     negative_shift_plotted = True
-
+    all_labels = extract_unique_ids(all_labels)
     # Sigma curves if enabled
     if plot_config["sigma_settings"]["enabled"] and plot_config["sigma_settings"]["sigma_values"]:
         print("Calculating Group Delay sigma curves...")
@@ -1115,7 +1149,7 @@ def generate_linear_phase_deviation_plot(networks, plot_config, kpi_config, sim_
                         all_handles.append(line)
                         all_labels.append("-Shift")
                         negative_shift_plotted = True
-
+    all_labels = extract_unique_ids(all_labels)
     # Add sigma curves for Linear Phase Deviation if enabled
     if plot_config["sigma_settings"]["enabled"] and plot_config["sigma_settings"]["sigma_values"]:
         print("Calculating Linear Phase Deviation sigma curves...")
@@ -1299,8 +1333,6 @@ def generate_flatness_scatter_plot(networks, plot_config, kpi_config, save_folde
     plt.close()
 
     return "Flatness_Scatter.png"
-
-
 
 
 def generate_gdv_scatter_plot(networks, plot_config, kpi_config, save_folder):
