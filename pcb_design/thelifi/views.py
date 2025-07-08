@@ -12,6 +12,7 @@ All endpoints include error handling, logging, and OpenAPI/Swagger documentation
 
 import time
 import os
+import re
 import io
 import uuid
 import glob
@@ -43,6 +44,10 @@ from .serializers import FilterSubmissionSerializer
 class FilterUploadView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
+    def sanitize_filename(self, text):
+        # Remove all characters except letters, digits, underscores, and dashes
+        return re.sub(r'[^A-Za-z0-9_-]', '', text)
+
     @swagger_auto_schema(...)
     def post(self, request):
         try:
@@ -56,7 +61,10 @@ class FilterUploadView(APIView):
             if not (model_number and edu_number and filter_type and s2p_files):
                 thelifi_logs.warning("Upload failed: Missing required fields.")
                 return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
-
+            
+            model_number = self.sanitize_filename(model_number)
+            edu_number = self.sanitize_filename(edu_number)
+            
             # ✅ Check if user already has a record
             existing_record = FilterSubmission.objects.filter(user=user).first()
             if existing_record:
