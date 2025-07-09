@@ -233,7 +233,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
             elif item.get("name") == "Coupling PCB":
                 part_description = (
-                    f"For Coupling PCB\n FR4 {length} x {width} x substrate thickness\n"
+                    f"For Coupling PCB\ FR4 {length} x {width} x substrate thickness\n"
                 )
 
             elif item.get("name") == "Other PCB":
@@ -304,7 +304,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             else:
                 core_code = "HAA"  # Default if coreBPN not present
 
-            part_no = f"B64-HAAEDU{edu_code}-{counter_str}+"
+            part_no = f"B64-{core_code}EDU{edu_code}-{counter_str}+"
 
             core_type = item.get("coreType", "single").lower()
             wire_type = item.get("wireType", "single").lower()
@@ -389,7 +389,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
             component_number = size_to_component_number.get(resonator_size, "B51-15-")  # Default to B51-15- if not found
 
-            part_no = f"{component_number}{dielectric_constant}-{resonator_frequency}-{counter_str}+"
+            part_no = f"{component_number}{dielectric_constant}-{resonator_frequency}-{int(counter_str)}+"
 
             if assembly_type == "tab":
                 part_description = "RESONATOR WITH SOLDERED TAB"
