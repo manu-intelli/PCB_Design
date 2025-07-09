@@ -67,26 +67,6 @@ class PiBaseFieldOptionSerializer(serializers.ModelSerializer):
         model = PiBaseFieldOption
         fields = '__all__'
 
-class PiBaseRecordSerializer(serializers.ModelSerializer):
-    """
-    Serializer for PiBaseRecord model, with a UUID-based recordId field.
-    """
-    recordId = serializers.SerializerMethodField()
-    class Meta:
-        model = PiBaseRecord
-        fields = '__all__'
-
-    def get_recordId(self, obj):
-        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
-
-class PiBaseRecordUniquenessSerializer(serializers.Serializer):
-    """
-    Serializer for checking uniqueness of PiBaseRecord fields.
-    """
-    opNumber = serializers.CharField(source='op_number')
-    opuNumber = serializers.CharField(source='opu_number')
-    eduNumber = serializers.CharField(source='edu_number')
-    modelName = serializers.CharField(source='model_name')
 
 class PiBaseImageSerializer(serializers.ModelSerializer):
     """
@@ -134,6 +114,37 @@ class PiBaseImageSerializer(serializers.ModelSerializer):
                 return f'data:{mime_type};base64,{encoded_file}'
         except Exception:
             return None
+class PiBaseRecordSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseRecord model, with a UUID-based recordId field.
+    """
+    recordId = serializers.SerializerMethodField()
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
+    class Meta:
+        model = PiBaseRecord
+        fields = '__all__'
+        extra_fields = ['schematicData']
+
+    def get_recordId(self, obj):
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
+    
+    def to_representation(self, instance):
+        try:
+            representation = super().to_representation(instance)
+            return representation
+        except Exception as e:
+            raise serializers.ValidationError(f"Error serializing PiBaseRecord: {e}")
+
+class PiBaseRecordUniquenessSerializer(serializers.Serializer):
+    """
+    Serializer for checking uniqueness of PiBaseRecord fields.
+    """
+    opNumber = serializers.CharField(source='op_number')
+    opuNumber = serializers.CharField(source='opu_number')
+    eduNumber = serializers.CharField(source='edu_number')
+    modelName = serializers.CharField(source='model_name')
+
+
 
 class PiBaseRecordGetSerializer(serializers.ModelSerializer):
     """

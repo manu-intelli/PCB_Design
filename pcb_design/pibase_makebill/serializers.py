@@ -233,7 +233,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
             elif item.get("name") == "Coupling PCB":
                 part_description = (
-                    f"For Coupling PCB\ FR4 {length} x {width} x substrate thickness\n"
+                    f"For Coupling PCB\n FR4 {length} x {width} x substrate thickness\n"
                 )
 
             elif item.get("name") == "Other PCB":
@@ -304,7 +304,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             else:
                 core_code = "HAA"  # Default if coreBPN not present
 
-            part_no = f"B64-{core_code}EDU{edu_code}-{counter_str}+"
+            part_no = f"B64-HAAEDU{edu_code}-{counter_str}+"
 
             core_type = item.get("coreType", "single").lower()
             wire_type = item.get("wireType", "single").lower()
@@ -367,8 +367,8 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             else:
                 part_description = f"{xfmr_prefix} Core (B60), wire gauge, number of turns, {orientation} {rohs}"
 
-            comments = "Packing method depends on orientation: Vertical = P2, Horizontal = P0"
-            notes = "XFMR description auto-generated based on PiBase inputs."
+            comments = ""
+            notes = ""
 
         elif component_name == "Resonator Details":
             resonator_size = item.get("resonatorSize", "").strip()
