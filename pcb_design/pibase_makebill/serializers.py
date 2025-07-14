@@ -296,13 +296,14 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             core_bpns = item.get("coreBPN", [])
             edu_code = edu_number or opu_number or "XXXX"
 
-            # ✅ Handle single or multiple cores
-            if len(core_bpns) == 1:
-                core_code = core_bpns[0]
-            elif len(core_bpns) >= 2:
-                core_code = ''.join(core_bpns)  # Concatenate both core numbers
+            if core_bpns:
+                first_core = core_bpns[0]
+                if "-" in first_core and "+" in first_core:
+                    core_code = first_core.split("-")[1].replace("+", "")
+                else:
+                    core_code = first_core  # fallback if format is unexpected
             else:
-                core_code = "HAA"  # Default if coreBPN not present
+                core_code = "HAA"  # Default core code if none found
 
             part_no = f"B64-{core_code}EDU{edu_code}-{counter_str}+"
 
