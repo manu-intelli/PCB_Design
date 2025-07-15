@@ -122,10 +122,59 @@ class GetUserSerializer(serializers.ModelSerializer):
         return [group.name for group in obj.groups.all()]
 
 class UpdateUserSerializer(serializers.ModelSerializer):
+    role = serializers.ListField(
+        child=serializers.CharField(), required=False
+    )
+
     class Meta:
         model = CustomUser
-        fields = ['full_name']
+        fields = ['full_name', 'role']
 
+    def update(self, instance, validated_data):
+        instance.full_name = validated_data.get('full_name', instance.full_name)
+
+        new_roles = validated_data.get('role', None)
+        if new_roles is not None:
+            new_roles = list(set([r.strip() for r in new_roles if r.strip()]))  # clean & deduplicate
+            current_roles = [group.name for group in instance.groups.all()]
+
+            # Check if current roles are subset of new roles
+            if set(current_roles).issubset(set(new_roles)):
+                # Only add new roles
+                for role in new_roles:
+                    if role not in current_roles:
+                        try:
+                            group = Group.objects.get(name=role)
+                            instance.groups.add(group)
+                        except Group.DoesNotExist:
+                            continue
+            else:
+                # Replace roles entirely
+                instance.groups.clear()
+                group_ids = []
+                for role in new_roles:
+                    try:
+                        group = Group.objects.get(name=role)
+                        instance.groups.add(group)
+                        group_ids.append(str(group.id))
+                    except Group.DoesNotExist:
+                        continue
+
+                # fallback
+                if not group_ids:
+                    group, _ = Group.objects.get_or_create(name='NormalUser')
+                    instance.groups.add(group)
+                    group_ids.append(str(group.id))
+
+                instance.role = ",".join(group_ids)
+
+        instance.save()
+        return instance
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['role'] = [group.name for group in instance.groups.all()]
+        return rep
 
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:

@@ -8,7 +8,8 @@ from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.exceptions import ValidationError, NotFound
 from .custom_permissions import IsAuthorized
-from .serializers import RegisterSerializer,RoleSerializer
+from .serializers import RegisterSerializer,RoleSerializer, UpdateUserSerializer
+from .models import CustomUser
 from .services import reset_user_password, get_users, update_user, delete_user
 from . import authentication_logs
 
@@ -117,22 +118,65 @@ class ForgetPasswordView(APIView):
             authentication_logs.error(f"Exception occurred: {e} for {request.data.get('email')}")
             return Response({"error": f"Exception occurred: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class UserAPIView(APIView):
+
+class UserListAPIView(APIView):
     permission_classes = [IsAuthorized]
+    http_method_names = ['get']  # ✅ Only allow GET
+
+    @swagger_auto_schema(
+        operation_description="Retrieve a list of all users",
+        responses={
+            200: openapi.Response("Success", UpdateUserSerializer(many=True)),
+            500: "Internal Server Error"
+        }
+    )
     def get(self, request):
         try:
-            authentication_logs.info(f"Getting the Users -- request done by {request.user.email}")
-            response = get_users()
-            authentication_logs.info(f"Users: {response}")
+            authentication_logs.info(f"Getting all users -- requested by {request.user.email}")
+            response = get_users()  # 🔁 Should return serialized data
             return Response(response, status=status.HTTP_200_OK)
         except Exception as e:
-            authentication_logs.error(f"Exception occurred While Getting the Users: {e}")
-            return Response({"error": f"Exception occurred While Getting the Users: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
-    
+            authentication_logs.error(f"Exception occurred while getting users: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class UserAPIView(APIView):
+    permission_classes = [IsAuthorized]
+
+    @swagger_auto_schema(
+        operation_description="Get a specific user by ID",
+        responses={
+            200: openapi.Response("User Retrieved", UpdateUserSerializer),
+            404: "User Not Found",
+            500: "Internal Server Error"
+        }
+    )
+    def get(self, request, pk):
+        try:
+            authentication_logs.info(f"Getting the User -- requested by {request.user.email} for user id: {pk}")
+            user = CustomUser.objects.get(pk=pk)
+            serializer = UpdateUserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            authentication_logs.error(f"User with id {pk} not found.")
+            return Response({"error": f"User with id {pk} not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            authentication_logs.error(f"Exception while retrieving user: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @swagger_auto_schema(
+        operation_description="Update a user by ID. This will replace their full name and roles.",
+        request_body=UpdateUserSerializer,
+        responses={
+            200: openapi.Response("User Updated", UpdateUserSerializer),
+            400: "Validation Error",
+            404: "User Not Found",
+            500: "Internal Server Error"
+        }
+    )
     def put(self, request, pk):
         try:
             authentication_logs.info(f"Updating the User -- request done by {request.user.email} for user id: {pk}")
-            response = update_user(request.data,pk)
+            response = update_user(request.data, pk)
             authentication_logs.info(f"Updated the User: {response}")
             return Response(response, status=status.HTTP_200_OK)
         except NotFound as e:
@@ -144,13 +188,26 @@ class UserAPIView(APIView):
         except Exception as e:
             authentication_logs.error(f"Exception occurred While Updating the User: {e} for user id: {pk}")
             return Response({"error": f"Exception occurred While Updating the User: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
+    @swagger_auto_schema(
+        operation_description="Delete a user by ID (soft delete by deactivating them)",
+        responses={
+            200: openapi.Response("User Deleted", openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    "message": openapi.Schema(type=openapi.TYPE_STRING, example="User deleted successfully.")
+                }
+            )),
+            404: "User Not Found",
+            500: "Internal Server Error"
+        }
+    )
     def delete(self, request, pk):
-        try:    
-            authentication_logs.info(f"Deleting the User -- request done by {request.user.email} for user id: {pk}")    
+        try:
+            authentication_logs.info(f"Deleting the User -- request done by {request.user.email} for user id: {pk}")
             response = delete_user(pk)
             authentication_logs.info(f"Deleted the User: {response}")
-            return Response(response)
+            return Response({"message": response}, status=status.HTTP_200_OK)
         except NotFound as e:
             authentication_logs.error(f"User Not Found: {e} for user id: {pk}")
             return Response({"error": f"User Not Found: {e}"}, status=status.HTTP_404_NOT_FOUND)
@@ -158,8 +215,8 @@ class UserAPIView(APIView):
             authentication_logs.error(f"Exception occurred While Deleting the User: {e} for user id: {pk}")
             return Response({"error": f"Exception occurred While Deleting the User: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 class RoleListView(APIView):
+    permission_classes = [IsAuthorized]
     """
     API endpoint to list all available roles.
     """
