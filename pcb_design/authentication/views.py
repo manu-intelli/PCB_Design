@@ -10,6 +10,7 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import ValidationError, NotFound
 from .custom_permissions import IsAuthorized
+from .custom_authentication import CustomJWTAuthentication
 from .serializers import RegisterSerializer,RoleSerializer, UpdateUserSerializer,UserListSerializer
 from .models import CustomUser
 from .services import reset_user_password, get_users, update_user, delete_user
@@ -133,10 +134,9 @@ def get_manual_parameters():
         openapi.Parameter(
             'role',
             openapi.IN_QUERY,
-            description="Filter users by one or more role names (multi-select)",
-            type=openapi.TYPE_ARRAY,
-            items=openapi.Items(type=openapi.TYPE_STRING, enum=role_enum),
-            collection_format='multi'  # Enables multi-value like ?role=Manager&role=Engineer
+            description="Comma-separated role names. Example: Approver,CADEngineer",
+            type=openapi.TYPE_STRING,
+            enum=role_enum  # still gives suggestions
         ),
         openapi.Parameter(
             'search',
@@ -158,7 +158,9 @@ def get_manual_parameters():
         ),
     ]
 
+
 class UserListAPIView(ListAPIView):
+    authentication_classes = [CustomJWTAuthentication]
     permission_classes = [IsAuthorized]
     serializer_class = UserListSerializer
     pagination_class = CustomPagination
@@ -176,7 +178,10 @@ class UserListAPIView(ListAPIView):
 
     def get_queryset(self):
         queryset = CustomUser.objects.all().order_by('id')
-        roles = self.request.query_params.getlist('role')  # multi-role support
+        
+        roles_param = self.request.query_params.get('role')
+        roles = [r.strip() for r in roles_param.split(',')] if roles_param else []
+
         search = self.request.query_params.get('search')
 
         if roles:
@@ -192,7 +197,9 @@ class UserListAPIView(ListAPIView):
         return queryset
 
 
+
 class UserAPIView(APIView):
+    authentication_classes = [CustomJWTAuthentication]
     permission_classes = [IsAuthorized]
 
     @swagger_auto_schema(
@@ -269,7 +276,9 @@ class UserAPIView(APIView):
             return Response({"error": f"Exception occurred While Deleting the User: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class RoleListView(APIView):
+    authentication_classes = [CustomJWTAuthentication]
     permission_classes = [IsAuthorized]
+
     """
     API endpoint to list all available roles.
     """
