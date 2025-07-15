@@ -145,6 +145,12 @@ def get_manual_parameters():
             type=openapi.TYPE_STRING
         ),
         openapi.Parameter(
+        'asc',
+        openapi.IN_QUERY,
+        description="Sort by ID in ascending (true) or descending (false) order. Default is ascending.",
+        type=openapi.TYPE_BOOLEAN
+        ),
+        openapi.Parameter(
             'page',
             openapi.IN_QUERY,
             description="Page number",
@@ -177,8 +183,11 @@ class UserListAPIView(ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = CustomUser.objects.all().order_by('id')
+        asc_param = self.request.query_params.get('asc', 'true').lower()
+        sort_order = 'id' if asc_param == 'true' else '-id'
         
+        queryset = CustomUser.objects.all().order_by(sort_order)
+
         roles_param = self.request.query_params.get('role')
         roles = [r.strip() for r in roles_param.split(',')] if roles_param else []
 
@@ -195,6 +204,7 @@ class UserListAPIView(ListAPIView):
             authentication_logs.info(f"Searching users by: {search}")
 
         return queryset
+
 
 
 
