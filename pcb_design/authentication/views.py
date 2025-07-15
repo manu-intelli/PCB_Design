@@ -1,18 +1,26 @@
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import ValidationError, NotFound
 from .custom_permissions import IsAuthorized
-from .serializers import RegisterSerializer,RoleSerializer, UpdateUserSerializer
+from .serializers import RegisterSerializer,RoleSerializer, UpdateUserSerializer,UserListSerializer
 from .models import CustomUser
 from .services import reset_user_password, get_users, update_user, delete_user
 from . import authentication_logs
+from rest_framework.pagination import PageNumberPagination
 
+
+class CustomPagination(PageNumberPagination):
+    page_size = 10  # Default page size
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class UserRegistrationView(APIView):
     permission_classes = [IsAuthorized]
@@ -118,26 +126,71 @@ class ForgetPasswordView(APIView):
             authentication_logs.error(f"Exception occurred: {e} for {request.data.get('email')}")
             return Response({"error": f"Exception occurred: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+def get_manual_parameters():
+    role_enum = list(Group.objects.exclude(name="Admin").values_list('name', flat=True))
 
-class UserListAPIView(APIView):
+    return [
+        openapi.Parameter(
+            'role',
+            openapi.IN_QUERY,
+            description="Filter users by one or more role names (multi-select)",
+            type=openapi.TYPE_ARRAY,
+            items=openapi.Items(type=openapi.TYPE_STRING, enum=role_enum),
+            collection_format='multi'  # Enables multi-value like ?role=Manager&role=Engineer
+        ),
+        openapi.Parameter(
+            'search',
+            openapi.IN_QUERY,
+            description="Search users by full name or email",
+            type=openapi.TYPE_STRING
+        ),
+        openapi.Parameter(
+            'page',
+            openapi.IN_QUERY,
+            description="Page number",
+            type=openapi.TYPE_INTEGER
+        ),
+        openapi.Parameter(
+            'page_size',
+            openapi.IN_QUERY,
+            description="Number of results per page",
+            type=openapi.TYPE_INTEGER
+        ),
+    ]
+
+class UserListAPIView(ListAPIView):
     permission_classes = [IsAuthorized]
-    http_method_names = ['get']  # ✅ Only allow GET
+    serializer_class = UserListSerializer
+    pagination_class = CustomPagination
 
     @swagger_auto_schema(
-        operation_description="Retrieve a list of all users",
+        manual_parameters=get_manual_parameters(),
+        operation_description="Retrieve paginated users, optionally filtered by role(s) or searched by full name/email",
         responses={
             200: openapi.Response("Success", UpdateUserSerializer(many=True)),
             500: "Internal Server Error"
         }
     )
-    def get(self, request):
-        try:
-            authentication_logs.info(f"Getting all users -- requested by {request.user.email}")
-            response = get_users()  # 🔁 Should return serialized data
-            return Response(response, status=status.HTTP_200_OK)
-        except Exception as e:
-            authentication_logs.error(f"Exception occurred while getting users: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        queryset = CustomUser.objects.all().order_by('id')
+        roles = self.request.query_params.getlist('role')  # multi-role support
+        search = self.request.query_params.get('search')
+
+        if roles:
+            queryset = queryset.filter(groups__name__in=roles).distinct()
+            authentication_logs.info(f"Filtering users by roles: {roles}")
+
+        if search:
+            queryset = queryset.filter(
+                Q(full_name__icontains=search) | Q(email__icontains=search)
+            )
+            authentication_logs.info(f"Searching users by: {search}")
+
+        return queryset
+
 
 class UserAPIView(APIView):
     permission_classes = [IsAuthorized]

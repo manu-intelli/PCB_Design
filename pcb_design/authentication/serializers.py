@@ -176,6 +176,16 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         rep['role'] = [group.name for group in instance.groups.all()]
         return rep
 
+class UserListSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'email', 'full_name', 'role', 'is_active']
+
+    def get_role(self, obj):
+        return [group.name for group in obj.groups.all()]
+
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
