@@ -233,7 +233,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
 
             elif item.get("name") == "Coupling PCB":
                 part_description = (
-                    f"For Coupling PCB\ FR4 {length} x {width} x substrate thickness\n"
+                    f"For Coupling PCB\n FR4 {length} x {width} x substrate thickness\n"
                 )
 
             elif item.get("name") == "Other PCB":
@@ -368,8 +368,8 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             else:
                 part_description = f"{xfmr_prefix} Core (B60), wire gauge, number of turns, {orientation} {rohs}"
 
-            comments = ""
-            notes = ""
+            comments = "-"
+            notes = "-"
 
         elif component_name == "Resonator Details":
             resonator_size = item.get("resonatorSize", "").strip()
@@ -399,7 +399,17 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             else:
                 part_description = "RESONATOR"
 
-            comments = item.get("comments", "-")
+            comment = item.get("comments")
+            resonator = item.get("resonatorLength")
+
+            if comment and resonator:
+                comments = str(comment) + " , Length: " + str(resonator)
+            elif comment:
+                comments = str(comment)
+            elif resonator:
+                comments = "Length: " + str(resonator)
+            else:
+                comments = "-"
 
 
         elif component_name == "Air Coil":
@@ -425,7 +435,8 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
         elif component_name == "Shield":
             part_no = f"B17-EDU{edu_number or 'YYYY'}-{counter_str}+"
             part_description = "----"
-            notes = "SHIELD 1.145 X .230 X .010 THK"
+            # notes = "SHIELD 1.145 X .230 X .010 THK"
+            notes = ""
 
         elif component_name == "Finger Details":
             edu_code = edu_number or "XXX"
@@ -437,7 +448,7 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             part_description = "----"
 
             # ✅ Fixed comment for Finger Details
-            comments = "Part to be finalized by CAD."
+            # comments = "Part to be finalized by CAD."
         
         elif component_name == "Copper Flap Details":
             edu_code = edu_number or "XXX"
@@ -449,8 +460,9 @@ def _make_component_row(item, s_no, component_name=None, case_style_data=None, e
             part_description = "----"
 
             # ✅ Fixed comment
-            comments = "Part to be finalized by CAD."
-            notes = "COPPER TAB .08X.03X.003 RoHS"
+            # comments = "Part to be finalized by CAD."
+            # notes = "COPPER TAB .08X.03X.003 RoHS"
+            notes = ""
         
         elif component_name == "LTCC Details":
             modelName = item.get("modelName") or "XXX"
