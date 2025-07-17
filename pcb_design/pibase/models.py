@@ -4,6 +4,11 @@ from django.conf import settings
 
 
 class PiBaseFieldCategory(models.Model):
+    """
+    Represents a category for base fields, defining their input type.
+    Examples include 'Model Family', 'Technology', etc., each associated with
+    an input type like 'Dropdown' or 'Radio Button'.
+    """
     INPUT_TYPE_CHOICES = (
         (1, 'Dropdown'),
         (2, 'Radio Button'),
@@ -16,6 +21,7 @@ class PiBaseFieldCategory(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Returns the name of the field category."""
         return self.name
 
     class Meta:
@@ -23,6 +29,10 @@ class PiBaseFieldCategory(models.Model):
 
 
 class PiBaseFieldOption(models.Model):
+    """
+    Represents an option within a PiBaseFieldCategory.
+    For example, for the 'Model Family' category, options might be 'iPhone', 'Galaxy', etc.
+    """
     category = models.ForeignKey(PiBaseFieldCategory, on_delete=models.CASCADE, related_name='options')
     value = models.CharField(max_length=100)
     status = models.BooleanField(default=True)
@@ -31,9 +41,21 @@ class PiBaseFieldOption(models.Model):
 
     @property
     def count(self):
-        return PiBaseFieldOption.objects.filter(category=self.category).count()
+        """
+        Returns the number of options within the same category.
+        This property demonstrates how to provide additional computed data.
+        """
+        try:
+            return PiBaseFieldOption.objects.filter(category=self.category).count()
+        except Exception as e:
+            # Log the exception for debugging purposes.
+            # In a real application, you might use a proper logging framework.
+            print(f"Error retrieving count for category {self.category.name}: {e}")
+            # Depending on desired behavior, re-raise the exception or return a default/error value
+            return 0 
 
     def __str__(self):
+        """Returns a string representation of the option, including its category."""
         return f"{self.category.name} - {self.value}"
 
     class Meta:
@@ -41,6 +63,10 @@ class PiBaseFieldOption(models.Model):
 
 
 class PiBaseComponent(models.Model):
+    """
+    Represents a reusable component that can be associated with PiBaseRecords.
+    Examples include specific ICs, connectors, etc.
+    """
     name = models.CharField(max_length=100, unique=True)
     format = models.JSONField(default=dict, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
@@ -50,6 +76,7 @@ class PiBaseComponent(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Returns the name of the component."""
         return self.name
 
     class Meta:
@@ -57,6 +84,9 @@ class PiBaseComponent(models.Model):
 
 
 class PiBaseStatus(models.Model):
+    """
+    Defines various statuses for PiBaseRecords.
+    """
     STATUS_CHOICES = (
         (1, 'Pending'),
         (2, 'Complete'),
@@ -70,14 +100,17 @@ class PiBaseStatus(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Returns the human-readable status description."""
         return dict(self.STATUS_CHOICES).get(self.status_code, "Unknown")
 
     class Meta:
         db_table = 'PiBaseStatus'
 
 
-
 class PiBaseImage(models.Model):
+    """
+    Stores image files related to PiBaseRecords, such as schematics or layouts.
+    """
     image_type = models.CharField(max_length=50, help_text="e.g. schematic, layout")
     image_file = models.FileField(upload_to='schematics/', blank=True, null=True)
     cookies = models.CharField(max_length=100, blank=True, null=True)  # optional metadata
@@ -86,6 +119,7 @@ class PiBaseImage(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
+        """Returns a descriptive string for the image."""
         return f"{self.image_type} Image"
 
     class Meta:
@@ -93,12 +127,28 @@ class PiBaseImage(models.Model):
 
 
 def get_default_status():
+    """
+    Helper function to retrieve the default status (e.g., 'Pending').
+    This function handles the case where the default status might not exist yet.
+    """
     try:
         return PiBaseStatus.objects.get(pk=1)
     except PiBaseStatus.DoesNotExist:
+        # Log a warning if the default status is not found.
+        # This might indicate a missing initial data setup.
+        print("WARNING: Default PiBaseStatus (pk=1) does not exist. Please ensure it is created.")
+        return None
+    except Exception as e:
+        # Catch any other unexpected errors during default status retrieval.
+        print(f"ERROR: An unexpected error occurred while fetching default status: {e}")
         return None
 
+
 class PiBaseRecord(models.Model):
+    """
+    The core model representing a complete record for a design or product,
+    combining various base fields, components, and hardware details.
+    """
     op_number = models.CharField(max_length=20, verbose_name="OP Number")
     opu_number = models.CharField(max_length=20, verbose_name="OPU Number")
     edu_number = models.CharField(max_length=20, verbose_name="EDU Number")
@@ -153,6 +203,11 @@ class PiBaseRecord(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def clean(self):
+        """
+        Custom validation to ensure that related PiBaseFieldOption instances
+        belong to the correct PiBaseFieldCategory.
+        Raises ValidationError if an option is selected from the wrong category.
+        """
         category_map = {
             'model_family': 'Model Family',
             'bottom_solder_mask': 'Bottom Solder Mask',
@@ -162,14 +217,26 @@ class PiBaseRecord(models.Model):
             'cover_type': 'Cover Type',
             'design_rule_violation': 'Design Rule Violation',
         }
+        errors = {}
         for field_name, expected_category in category_map.items():
             option = getattr(self, field_name)
-            if option and option.category.name != expected_category:
-                raise ValidationError({
-                    field_name: f"Option must belong to category '{expected_category}'."
-                })
+            if option:
+                try:
+                    if option.category.name != expected_category:
+                        errors[field_name] = f"Option must belong to category '{expected_category}'."
+                except PiBaseFieldCategory.DoesNotExist:
+                    # This implies a data inconsistency where an option's category is missing.
+                    # This should be a rare case if referential integrity is maintained.
+                    errors[field_name] = f"Associated category for '{field_name}' (ID: {option.category_id}) not found."
+                except Exception as e:
+                    # Catch any other unexpected errors during category validation (e.g., database issues).
+                    errors[field_name] = f"An unexpected error occurred validating {field_name}: {e}"
+
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
+        """Returns a human-readable string representation of the PiBaseRecord."""
         return f"{self.model_name} (OP#{self.op_number})"
 
     class Meta:

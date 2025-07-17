@@ -49,6 +49,10 @@ class PiBaseComponentListView(generics.ListAPIView):
     pagination_class = None
 
     def list(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list all PiBaseComponent records.
+        Logs success and error events.
+        """
         try:
             response = super().list(request, *args, **kwargs)
             pi_base_logs.info("Successfully listed all PiBaseComponent records.")
@@ -68,6 +72,10 @@ class PiBaseFieldCategoryListView(generics.ListAPIView):
     pagination_class = None
 
     def list(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list all PiBaseFieldCategory records.
+        Logs success and error events.
+        """
         try:
             response = super().list(request, *args, **kwargs)
             pi_base_logs.info("Successfully listed all PiBaseFieldCategory records.")
@@ -87,6 +95,10 @@ class PiBaseFieldOptionListView(generics.ListAPIView):
     pagination_class = None
 
     def list(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list all PiBaseFieldOption records.
+        Logs success and error events.
+        """
         try:
             response = super().list(request, *args, **kwargs)
             pi_base_logs.info("Successfully listed all PiBaseFieldOption records.")
@@ -102,6 +114,7 @@ from rest_framework.pagination import PageNumberPagination
 class PiBaseRecordPagination(PageNumberPagination):
     """
     Pagination class for PiBaseRecord list endpoints.
+    Defines the page size and allows clients to specify it via a query parameter.
     """
     page_size = 10
     page_size_query_param = (
@@ -141,6 +154,10 @@ class PiBaseRecordListView(generics.ListAPIView):
     ordering = ["-created_at"]  # Default ordering
 
     def get_queryset(self):
+        """
+        Returns PiBaseRecord objects created by the current user.
+        Handles exceptions and logs errors.
+        """
         try:
             queryset = PiBaseRecord.objects.filter(created_by=self.request.user)
             return queryset
@@ -149,6 +166,10 @@ class PiBaseRecordListView(generics.ListAPIView):
             return PiBaseRecord.objects.none()
 
     def list(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list PiBaseRecord records for the current user.
+        Logs success and error events.
+        """
         try:
             response = super().list(request, *args, **kwargs)
             pi_base_logs.info(f"Successfully listed PiBaseRecord records for user {request.user}.")
@@ -167,6 +188,10 @@ class PiBaseImageViewSet(viewsets.ModelViewSet):
     serializer_class = PiBaseImageSerializer
 
     def list(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list all PiBaseImage records.
+        Logs success and error events.
+        """
         try:
             response = super().list(request, *args, **kwargs)
             pi_base_logs.info("Successfully listed all PiBaseImage records.")
@@ -176,6 +201,10 @@ class PiBaseImageViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def create(self, request, *args, **kwargs):
+        """
+        Handles POST requests to create a new PiBaseImage record.
+        Logs success and error events.
+        """
         try:
             response = super().create(request, *args, **kwargs)
             pi_base_logs.info("Successfully created a new PiBaseImage record.")
@@ -185,6 +214,10 @@ class PiBaseImageViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def update(self, request, *args, **kwargs):
+        """
+        Handles PUT/PATCH requests to update an existing PiBaseImage record.
+        Logs success and error events.
+        """
         try:
             response = super().update(request, *args, **kwargs)
             pi_base_logs.info("Successfully updated a PiBaseImage record.")
@@ -194,6 +227,10 @@ class PiBaseImageViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, *args, **kwargs):
+        """
+        Handles DELETE requests to delete a PiBaseImage record.
+        Logs success and error events.
+        """
         try:
             response = super().destroy(request, *args, **kwargs)
             pi_base_logs.info("Successfully deleted a PiBaseImage record.")
@@ -226,6 +263,7 @@ class GroupedFieldOptionsView(APIView):
     def get(self, request):
         """
         GET method to fetch grouped field options from PiBaseFieldCategory and MstCategory data sources.
+        Logs information and errors during the process.
         """
         data = {}
         try:
@@ -241,26 +279,29 @@ class GroupedFieldOptionsView(APIView):
         """
         Adds options from PiBaseFieldCategory and its related options to the response dictionary.
         Categories and their active options are formatted into {LABEL, VALUE} pairs.
+        Handles exceptions during category processing.
         """
         try:
             categories = PiBaseFieldCategory.objects.filter(status=True).prefetch_related("options")
             for cat in categories:
+                key = f"{cat.name.upper().replace(' ', '_')}_OPTIONS"
                 try:
-                    key = f"{cat.name.upper().replace(' ', '_')}_OPTIONS"
                     data[key] = [
                         {"label": opt.value, "value": opt.id}
                         for opt in cat.options.all() if opt.status
                     ]
                 except Exception as inner_err:
-                    pi_base_logs.warning(f"Error processing category '{cat.name}': {str(inner_err)}")
+                    pi_base_logs.warning(f"Error processing options for category '{cat.name}': {str(inner_err)}")
                     data[key] = []
         except Exception as e:
-            pi_base_logs.error(f"[PiBase] Error fetching categories: {str(e)}")
+            pi_base_logs.error(f"[PiBase] Error fetching PiBaseFieldCategory data: {str(e)}")
+            # Optionally, you might raise this exception further or return an error response
 
     def add_mst_category_options(self, data):
         """
         Adds mapped MstCategory and related MstSubCategory options to the response dictionary.
         Each set is appended with an 'Others' item with a static fallback value.
+        Handles exceptions during category lookup and sub-category fetching.
         """
         for name, (key, other_value) in self.CATEGORY_MAP.items():
             try:
@@ -275,20 +316,25 @@ class GroupedFieldOptionsView(APIView):
                 data[key].append({"label": "Others", "value": other_value})
 
             except Exception as e:
-                pi_base_logs.error(f"[MstSubCategory] Error for '{name}': {str(e)}")
+                pi_base_logs.error(f"[MstSubCategory] Error fetching options for '{name}': {str(e)}")
                 data[key] = []
 
 # =====================================================================================================================================
 
 class CheckPiBaseRecordUniqueView(APIView):
     """
-    API endpoint to check uniqueness of PiBaseRecord fields.
+    API endpoint to check uniqueness of PiBaseRecord fields in the database.
     Accepts op_number, opu_number, edu_number, and model_name in POST data.
     Returns uniqueness status and message for each field.
     """
 
     @swagger_auto_schema(request_body=PiBaseRecordUniquenessSerializer)
     def post(self, request, *args, **kwargs):
+        """
+        Handles POST requests to check the uniqueness of specified PiBaseRecord fields.
+        Validates input data and checks database for existing records.
+        Logs success, warning, and error events.
+        """
         try:
             serializer = PiBaseRecordUniquenessSerializer(data=request.data)
             if serializer.is_valid():
@@ -325,7 +371,7 @@ class CheckPiBaseRecordUniqueView(APIView):
                 pi_base_logs.info("Successfully checked uniqueness for PiBaseRecord fields.")
                 return Response(results, status=status.HTTP_200_OK)
 
-            pi_base_logs.warning("Invalid data received for uniqueness check.")
+            pi_base_logs.warning(f"Invalid data received for uniqueness check: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             pi_base_logs.error(f"Error in CheckPiBaseRecordUniqueView.post: {e}")
@@ -343,6 +389,10 @@ class PiBaseRecordCreateAPIView(generics.CreateAPIView):
     authentication_classes = [CustomJWTAuthentication]
 
     def create(self, request, *args, **kwargs):
+        """
+        Handles POST requests to create a new PiBaseRecord.
+        Logs success and error events.
+        """
         try:
             response = super().create(request, *args, **kwargs)
             pi_base_logs.info(f"Successfully created a new PiBaseRecord by user {request.user}.")
@@ -360,28 +410,44 @@ class PiBaseRecordUpdateAPIView(generics.UpdateAPIView):
     authentication_classes = [CustomJWTAuthentication]
 
     def get_queryset(self):
+        """
+        Returns the queryset of all PiBaseRecord objects.
+        """
         return PiBaseRecord.objects.all()
 
     def get_object(self):
+        """
+        Retrieves a single PiBaseRecord object based on the UUID provided in the URL.
+        It iterates through all records and generates a UUID for each to find a match.
+        Raises Http404 if no record is found or an unexpected error occurs during retrieval.
+        """
         try:
             record_uuid = self.kwargs.get("record_id")
             for obj in self.get_queryset():
                 generated_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"PiBase-{obj.id}")
                 if str(generated_uuid) == str(record_uuid):
                     return obj
-            pi_base_logs.error("Record not found for update.")
+            pi_base_logs.error(f"Record not found for update: {record_uuid}")
             raise Http404("Record not found")
+        except Http404:
+            # Re-raise Http404 as it's an expected outcome for "not found"
+            raise
         except Exception as e:
             pi_base_logs.error(f"Error in PiBaseRecordUpdateAPIView.get_object: {e}")
-            raise Http404("Record not found")
+            # Raise a more generic Http404 for unexpected errors during retrieval
+            raise Http404("Record not found due to an internal error.")
 
     def update(self, request, *args, **kwargs):
+        """
+        Handles PUT/PATCH requests to update an existing PiBaseRecord.
+        Logs success and error events.
+        """
         try:
             response = super().update(request, *args, **kwargs)
             pi_base_logs.info(f"Successfully updated PiBaseRecord {kwargs.get('record_id')}.")
             return response
         except Exception as e:
-            pi_base_logs.error(f"Error updating PiBaseRecord: {e}")
+            pi_base_logs.error(f"Error updating PiBaseRecord {kwargs.get('record_id')}: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class PiBaseRecordRetrieveAPIView(generics.RetrieveAPIView):
@@ -393,9 +459,17 @@ class PiBaseRecordRetrieveAPIView(generics.RetrieveAPIView):
     authentication_classes = [CustomJWTAuthentication]
 
     def get_queryset(self):
+        """
+        Returns the queryset of all PiBaseRecord objects.
+        """
         return PiBaseRecord.objects.all()
 
     def get_object(self):
+        """
+        Retrieves a single PiBaseRecord object based on the UUID provided in the URL.
+        It iterates through all records and generates a UUID for each to find a match.
+        Raises Http404 if no record is found or an unexpected error occurs during retrieval.
+        """
         try:
             record_uuid = self.kwargs.get("record_id")
             for obj in self.get_queryset():
@@ -403,11 +477,14 @@ class PiBaseRecordRetrieveAPIView(generics.RetrieveAPIView):
                 if str(generated_uuid) == str(record_uuid):
                     pi_base_logs.info(f"Successfully retrieved PiBaseRecord {record_uuid}.")
                     return obj
-            pi_base_logs.error("Record not found for retrieve.")
+            pi_base_logs.error(f"Record not found for retrieve: {record_uuid}")
             raise Http404("Record not found")
+        except Http404:
+            # Re-raise Http404 as it's an expected outcome for "not found"
+            raise
         except Exception as e:
             pi_base_logs.error(f"Error in PiBaseRecordRetrieveAPIView.get_object: {e}")
-            raise Http404("Record not found")
+            # Raise a more generic Http404 for unexpected errors during retrieval
+            raise Http404("Record not found due to an internal error.")
 
 # =====================================================================================================================================
-

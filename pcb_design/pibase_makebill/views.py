@@ -38,6 +38,7 @@ from rest_framework.pagination import PageNumberPagination
 class MakeBillRecordPagination(PageNumberPagination):
     """
     Pagination class for PiBaseRecord list endpoints.
+    Defines the page size and allows clients to specify it via a query parameter.
     """
 
     page_size = 10
@@ -125,12 +126,23 @@ class MakeBillRetrieveAPIView(generics.RetrieveAPIView):
         responses={200: MakeBillRecordGetSerializer()},
     )
     def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests to retrieve a single PiBaseRecord by its UUID.
+        """
         return self.retrieve(request, *args, **kwargs)
 
     def get_queryset(self):
+        """
+        Returns the queryset of all PiBaseRecord objects.
+        """
         return PiBaseRecord.objects.all()
 
     def get_object(self):
+        """
+        Retrieves a single PiBaseRecord object based on the UUID provided in the URL.
+        It iterates through all records and generates a UUID for each to find a match.
+        Raises Http404 if no record is found or an unexpected error occurs during retrieval.
+        """
         try:
             record_uuid = self.kwargs.get("record_id")
             for obj in self.get_queryset():
@@ -142,11 +154,15 @@ class MakeBillRetrieveAPIView(generics.RetrieveAPIView):
                     return obj
             make_bill_logs.error("Record not found for retrieve.")
             raise Http404("Record not found")
+        except Http404:
+            # Re-raise Http404 as it's an expected outcome for "not found"
+            raise
         except Exception as e:
             make_bill_logs.error(
                 f"Error in PiBaseRecordRetrieveAPIView.get_object: {e}"
             )
-            raise Http404("Record not found")
+            # Raise a more generic Http404 for unexpected errors during retrieval
+            raise Http404("Record not found due to an internal error.")
 
 
 class MakeBillGetAPIView(APIView):
@@ -163,6 +179,11 @@ class MakeBillGetAPIView(APIView):
         responses={200: MakeBillRecordGetSerializer()},
     )
     def get(self, request, record_id):
+        """
+        Handles GET requests to retrieve a MakeBillRecord by its UUID.
+        Validates the UUID format and retrieves the corresponding record.
+        Logs information and errors during the process.
+        """
         try:
             make_bill_logs.info(
                 f"Getting MakeBillRecord API called for: {record_id} -- user: {request.user}"
@@ -175,7 +196,8 @@ class MakeBillGetAPIView(APIView):
                     if len(record_id) == 36
                     else UUID(record_id)
                 )
-            except ValueError:
+            except ValueError as ve:
+                make_bill_logs.error(f"Invalid UUID format provided: {record_id} - {ve}")
                 raise NotFound("Invalid UUID format.")
 
             make_bill = MakeBillRecord.objects.get(id=uuid_obj)
@@ -189,7 +211,10 @@ class MakeBillGetAPIView(APIView):
             return Response(
                 {"error": "MakeBillRecord not found."}, status=status.HTTP_404_NOT_FOUND
             )
-
+        except NotFound as nf:
+            return Response(
+                {"error": str(nf)}, status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             make_bill_logs.error(
                 f"Exception occurred while retrieving MakeBillRecord: {e}"
@@ -201,6 +226,9 @@ class MakeBillGetAPIView(APIView):
 
 
 class MakeBillListAPIView(ListAPIView):
+    """
+    API endpoint to list all MakeBillRecord entries with pagination.
+    """
     queryset = MakeBillRecord.objects.all()
     serializer_class = MakeBillRecordSerializer
     permission_classes = [IsAuthenticated]
@@ -211,6 +239,9 @@ class MakeBillListAPIView(ListAPIView):
         responses={200: MakeBillRecordSerializer(many=True)},
     )
     def get(self, request, *args, **kwargs):
+        """
+        Handles GET requests to list all MakeBillRecord entries.
+        """
         return super().get(request, *args, **kwargs)
 
 
@@ -221,6 +252,9 @@ from collections import defaultdict
 
 
 class MakeBillCreateAPIView(APIView):
+    """
+    API endpoint to create a new MakeBillRecord from provided component data.
+    """
     @swagger_auto_schema(
         operation_description="Create a new MakeBillRecord from provided component data.",
         request_body=openapi.Schema(
@@ -238,77 +272,92 @@ class MakeBillCreateAPIView(APIView):
         responses={201: MakeBillRecordSerializer()},
     )
     def post(self, request):
-        data = request.data.copy()
-        components = data.get("componentsData", [])
+        """
+        Handles POST requests to create a new MakeBillRecord.
+        Processes component data, sets default values, and updates the status of the associated PiBaseRecord.
+        """
+        try:
+            data = request.data.copy()
+            components = data.get("componentsData", [])
 
-        # ✅ Set defaults
-        data.setdefault("status", 1)
-        data.setdefault("revision_number", "1")
-        if request.user and request.user.is_authenticated:
-            data["created_by"] = request.user.id
+            # Set defaults
+            data.setdefault("status", 1)
+            data.setdefault("revision_number", "1")
+            if request.user and request.user.is_authenticated:
+                data["created_by"] = request.user.id
 
-        # ✅ Component Field Mapping
-        component_field_map = {
-            "PCB Name": "pcb_details",
-            "CAN Details": "can_details",
-            "Chip Capacitors": "chip_capacitor_details",
-            "Chip Inductors": "chip_inductor_details",
-            "Air Coil": "chip_aircoil_details",
-            "Transformer": "transformer_details",
-            "Shield": "shield_details",
-            "Finger Details": "finger_details",
-            "Copper Flap Details": "copper_flaps_details",
-            "Resonator Details": "resonator_details",
-            "Chip Resistor": "chip_resistor_details",
-            "LTCC Details": "ltcc_details",
-        }
+            # Component Field Mapping
+            component_field_map = {
+                "PCB Name": "pcb_details",
+                "CAN Details": "can_details",
+                "Chip Capacitors": "chip_capacitor_details",
+                "Chip Inductors": "chip_inductor_details",
+                "Air Coil": "chip_aircoil_details",
+                "Transformer": "transformer_details",
+                "Shield": "shield_details",
+                "Finger Details": "finger_details",
+                "Copper Flap Details": "copper_flaps_details",
+                "Resonator Details": "resonator_details",
+                "Chip Resistor": "chip_resistor_details",
+                "LTCC Details": "ltcc_details",
+            }
 
-        # ✅ Grouping components
-        grouped = defaultdict(list)
-        others = []
+            # Grouping components
+            grouped = defaultdict(list)
+            others = []
 
-        for comp in components:
-            name = comp.get("componentName", "").strip()
-            if name in component_field_map:
-                grouped[name].append(comp)
-            else:
-                others.append(comp)
+            for comp in components:
+                name = comp.get("componentName", "").strip()
+                if name in component_field_map:
+                    grouped[name].append(comp)
+                else:
+                    others.append(comp)
 
-        # ✅ Assign mapped fields
-        for component_name, field_name in component_field_map.items():
-            if component_name in grouped:
-                data[field_name] = grouped[component_name]
+            # Assign mapped fields
+            for component_name, field_name in component_field_map.items():
+                if component_name in grouped:
+                    data[field_name] = grouped[component_name]
 
-        # ✅ Save full components + unknown to 'components' and 'others'
-        data["components"] = grouped
-        if others:
-            data["others"] = others
+            # Save full components + unknown to 'components' and 'others'
+            data["components"] = grouped
+            if others:
+                data["others"] = others
 
-        # ✅ Serialize and save
-        serializer = MakeBillRecordSerializer(data=data)
-        if serializer.is_valid():
-            makebill = serializer.save()
+            # Serialize and save
+            serializer = MakeBillRecordSerializer(data=data)
+            if serializer.is_valid():
+                makebill = serializer.save()
 
-            # ✅ Update PiBase status
-            pibase_id = data.get("pibaseId")
-            if pibase_id:
-                try:
-                    pibase_record = PiBaseRecord.objects.get(id=pibase_id)
-                    pibase_status = PiBaseStatus.objects.get(status_code=3)
-                    pibase_record.status = pibase_status
-                    pibase_record.save()
-                except (PiBaseRecord.DoesNotExist, PiBaseStatus.DoesNotExist):
-                    pass  # Optional logging
+                # Update PiBase status
+                pibase_id = data.get("pibaseId")
+                if pibase_id:
+                    try:
+                        pibase_record = PiBaseRecord.objects.get(id=pibase_id)
+                        pibase_status = PiBaseStatus.objects.get(status_code=3)
+                        pibase_record.status = pibase_status
+                        pibase_record.save()
+                    except (PiBaseRecord.DoesNotExist, PiBaseStatus.DoesNotExist) as e:
+                        make_bill_logs.warning(f"Could not update PiBaseRecord status for id {pibase_id}: {e}")
+                    except Exception as e:
+                        make_bill_logs.error(f"Unexpected error updating PiBaseRecord status for id {pibase_id}: {e}")
+                        # Depending on desired behavior, you might re-raise or return an error here
+                        pass
 
-            return Response(serializer.data, status=201)
+                return Response(serializer.data, status=201)
 
-        return Response(serializer.errors, status=400)
+            return Response(serializer.errors, status=400)
+        except Exception as e:
+            make_bill_logs.error(f"Error creating MakeBillRecord: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # =====================
 # Update API
 # =====================
 class MakeBillUpdateAPIView(APIView):
+    """
+    API endpoint to update an existing MakeBillRecord with partial data, especially components.
+    """
     @swagger_auto_schema(
         operation_description="Update an existing MakeBillRecord with partial data, especially components.",
         request_body=openapi.Schema(
@@ -325,8 +374,13 @@ class MakeBillUpdateAPIView(APIView):
         responses={200: MakeBillRecordSerializer()},
     )
     def patch(self, request, record_id):
+        """
+        Handles PATCH requests to update an existing MakeBillRecord.
+        Allows partial updates, specifically for component data, and updates revision number.
+        """
         try:
             make_bill = None
+            # Iterate to find the MakeBillRecord by its generated UUID
             for record in MakeBillRecord.objects.all():
                 if str(uuid5(NAMESPACE_DNS, f"MakeBill-{record.id}")) == str(record_id):
                     make_bill = record
@@ -338,6 +392,7 @@ class MakeBillUpdateAPIView(APIView):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
+            # Check if the record status allows updates
             if not make_bill.status or make_bill.status.id != 1:
                 return Response(
                     {"error": "Only records with 'Pending' status can be updated."},
@@ -347,19 +402,20 @@ class MakeBillUpdateAPIView(APIView):
             data = request.data.copy()
             components = data.get("componentsData", [])
 
-            # ✅ Set status and revision
+            # Set status and revision
             data.setdefault("status", 1)
             try:
                 current_rev = int(make_bill.revision_number or 0)
                 data["revision_number"] = str(current_rev + 1)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                make_bill_logs.warning(f"Error converting revision number for MakeBillRecord {make_bill.id}: {e}. Setting to '1'.")
                 data["revision_number"] = "1"
 
-            # ✅ Set updated_by
+            # Set updated_by
             if request.user and request.user.is_authenticated:
                 data["updated_by"] = request.user.id
 
-            # ✅ Field mapping
+            # Field mapping for components
             component_field_map = {
                 "PCB Name": "pcb_details",
                 "CAN Details": "can_details",
@@ -385,16 +441,16 @@ class MakeBillUpdateAPIView(APIView):
                 else:
                     others.append(comp)
 
-            # ✅ Assign to mapped fields
+            # Assign to mapped fields
             for component_name, field_name in component_field_map.items():
                 if component_name in grouped:
                     data[field_name] = grouped[component_name]
 
-            # ✅ Save unknown components
+            # Save unknown components
             if others:
                 data["others"] = others
 
-            # ✅ Remove raw componentsData
+            # Remove raw componentsData as it's processed into other fields
             data["components"] = grouped
             data.pop("componentsData", None)
 
@@ -406,19 +462,26 @@ class MakeBillUpdateAPIView(APIView):
             return Response(serializer.errors, status=400)
 
         except Exception as e:
-            return Response({"error": str(e)}, status=500)
+            make_bill_logs.error(f"Error updating MakeBillRecord {record_id}: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
 
 from uuid import uuid5, NAMESPACE_DNS
 
 
 class MakeBillDeleteAPIView(APIView):
+    """
+    API endpoint for deleting MakeBillRecord.
+    DELETE method is explicitly not allowed for this resource.
+    """
     @swagger_auto_schema(
         operation_description="DELETE is not allowed for MakeBillRecord.",
         responses={405: "DELETE is not allowed"},
     )
     def delete(self, request, record_id):
+        """
+        Handles DELETE requests. Returns a 405 Method Not Allowed response.
+        """
         return Response({"error": "DELETE is not allowed"}, status=405)
 
 
@@ -491,6 +554,11 @@ class MakeBillGetAPIView(APIView):
         },
     )
     def get(self, request, record_id):
+        """
+        Handles GET requests to retrieve a MakeBillRecord by its custom UUID.
+        Dynamically extracts and structures component data from various fields
+        (e.g., pcb_details, can_details, others) into a unified 'componentsData' list.
+        """
         try:
             make_bill = None
             for record in MakeBillRecord.objects.all():
@@ -499,6 +567,7 @@ class MakeBillGetAPIView(APIView):
                     break
 
             if not make_bill:
+                make_bill_logs.error(f"MakeBillRecord not found for UUID: {record_id}")
                 return Response(
                     {"error": "MakeBillRecord not found."},
                     status=status.HTTP_404_NOT_FOUND,
@@ -515,37 +584,44 @@ class MakeBillGetAPIView(APIView):
 
         # Handle known fields
         for field in self.COMPONENT_FIELDS:
-            details = getattr(make_bill, field, None)
-            if not details:
-                continue
+            try:
+                details = getattr(make_bill, field, None)
+                if not details:
+                    continue
 
-            if isinstance(details, list):
-                for item in details:
-                    s_no = item.get("sNo") or auto_sno
-                    components_data.append(self._make_component_row(item, s_no, field))
-                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+                if isinstance(details, list):
+                    for item in details:
+                        s_no = item.get("sNo") or auto_sno
+                        components_data.append(self._make_component_row(item, s_no, field))
+                        auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
 
-            elif isinstance(details, dict):
-                if any(isinstance(v, list) for v in details.values()):
-                    for v in details.values():
-                        if isinstance(v, list):
-                            for item in v:
-                                s_no = item.get("sNo") or auto_sno
-                                components_data.append(self._make_component_row(item, s_no, field))
-                                auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
-                else:
-                    s_no = details.get("sNo") or auto_sno
-                    components_data.append(self._make_component_row(details, s_no, field))
-                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+                elif isinstance(details, dict):
+                    if any(isinstance(v, list) for v in details.values()):
+                        for v in details.values():
+                            if isinstance(v, list):
+                                for item in v:
+                                    s_no = item.get("sNo") or auto_sno
+                                    components_data.append(self._make_component_row(item, s_no, field))
+                                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+                    else:
+                        s_no = details.get("sNo") or auto_sno
+                        components_data.append(self._make_component_row(details, s_no, field))
+                        auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+            except Exception as e:
+                make_bill_logs.error(f"Error processing component field '{field}' for MakeBillRecord {make_bill.id}: {e}")
+                # Continue processing other fields even if one fails
 
         # Handle 'others' field
-        others = getattr(make_bill, "others", [])
-        if isinstance(others, list):
-            for item in others:
-                s_no = item.get("sNo") or auto_sno
-                components_data.append(self._make_component_row(item, s_no, "others"))
-                auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
-
+        try:
+            others = getattr(make_bill, "others", [])
+            if isinstance(others, list):
+                for item in others:
+                    s_no = item.get("sNo") or auto_sno
+                    components_data.append(self._make_component_row(item, s_no, "others"))
+                    auto_sno = max(auto_sno, s_no + 1) if isinstance(s_no, int) else auto_sno + 1
+        except Exception as e:
+            make_bill_logs.error(f"Error processing 'others' field for MakeBillRecord {make_bill.id}: {e}")
+            # Continue with the rest of the response
 
         response_data = {
             "pibaseId": str(make_bill.id),
@@ -565,6 +641,17 @@ class MakeBillGetAPIView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
     def _make_component_row(self, item, s_no, field):
+        """
+        Helper function to construct a single row for a component within the `componentsData` list.
+
+        Args:
+            item (dict): The dictionary containing the raw details of the component.
+            s_no (int): The serial number for the component row.
+            field (str): The name of the field from which this component data originated (e.g., "pcb_details").
+
+        Returns:
+            dict: A dictionary representing a single structured component row.
+        """
         component_name = self.FIELD_TO_NAME.get(field, field)
         return {
             "id": str(s_no),
