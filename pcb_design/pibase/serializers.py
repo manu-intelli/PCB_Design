@@ -1,0 +1,385 @@
+"""
+Serializers for the pibase app.
+
+These serializers handle conversion between PiBase models and JSON representations
+for API requests and responses. Includes custom validation, nested serializers,
+and utility fields for PiBaseRecord and related models.
+"""
+
+import uuid
+from rest_framework import serializers
+from .models import (
+    PiBaseComponent, PiBaseFieldCategory, PiBaseRecord,
+    PiBaseFieldOption, PiBaseStatus, PiBaseImage
+)
+from django.contrib.auth import get_user_model
+import json
+import string
+import random
+import base64
+import mimetypes
+
+User = get_user_model()
+
+class StringifiedJSONField(serializers.JSONField):
+    """
+    Custom JSONField that accepts JSON strings and parses them to Python objects.
+    """
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError as e:
+                raise serializers.ValidationError(f"Invalid JSON string: {e}")
+        return super().to_internal_value(data)
+
+def safe_json_load(raw):
+    """
+    Safely load a JSON string, returning None or the raw value on error.
+    """
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return raw
+
+class PiBaseComponentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseComponent model.
+    """
+    class Meta:
+        model = PiBaseComponent
+        fields = '__all__'
+
+class PiBaseFieldCategorySerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseFieldCategory model.
+    """
+    class Meta:
+        model = PiBaseFieldCategory
+        fields = '__all__'
+
+class PiBaseFieldOptionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseFieldOption model, with nested category.
+    """
+    category = PiBaseFieldCategorySerializer(read_only=True)
+    class Meta:
+        model = PiBaseFieldOption
+        fields = '__all__'
+
+
+class PiBaseImageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseImage model, includes base64-encoded image data.
+    """
+    base64_data = serializers.SerializerMethodField()
+    class Meta:
+        model = PiBaseImage
+        fields = '__all__'
+
+    def _generate_unique_cookies(self):
+        chars = string.ascii_letters + string.digits
+        while True:
+            random_str = ''.join(random.choices(chars, k=22))
+            if not PiBaseImage.objects.filter(cookies=random_str).exists():
+                return random_str
+
+    def create(self, validated_data):
+        try:
+            if 'cookies' not in validated_data or not validated_data['cookies']:
+                validated_data['cookies'] = self._generate_unique_cookies()
+            return super().create(validated_data)
+        except Exception as e:
+            raise serializers.ValidationError(f"Error creating PiBaseImage: {e}")
+
+    def update(self, instance, validated_data):
+        try:
+            if 'cookies' not in validated_data or not validated_data['cookies']:
+                validated_data['cookies'] = self._generate_unique_cookies()
+            return super().update(instance, validated_data)
+        except Exception as e:
+            raise serializers.ValidationError(f"Error updating PiBaseImage: {e}")
+    
+    def get_base64_data(self, obj):
+        """
+        Returns the image file as a base64-encoded data URI.
+        """
+        try:
+            file_path = obj.image_file.path
+            with open(file_path, 'rb') as f:
+                encoded_file = base64.b64encode(f.read()).decode('utf-8')
+                mime_type, _ = mimetypes.guess_type(file_path)
+                if not mime_type:
+                    mime_type = 'application/octet-stream'
+                return f'data:{mime_type};base64,{encoded_file}'
+        except Exception:
+            return None
+class PiBaseRecordSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseRecord model, with a UUID-based recordId field.
+    """
+    recordId = serializers.SerializerMethodField()
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
+    class Meta:
+        model = PiBaseRecord
+        fields = '__all__'
+        extra_fields = ['schematicData']
+
+    def get_recordId(self, obj):
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f'PiBase-{obj.id}'))
+    
+    def to_representation(self, instance):
+        try:
+            representation = super().to_representation(instance)
+            return representation
+        except Exception as e:
+            raise serializers.ValidationError(f"Error serializing PiBaseRecord: {e}")
+
+class PiBaseRecordUniquenessSerializer(serializers.Serializer):
+    """
+    Serializer for checking uniqueness of PiBaseRecord fields.
+    """
+    opNumber = serializers.CharField(source='op_number')
+    opuNumber = serializers.CharField(source='opu_number')
+    eduNumber = serializers.CharField(source='edu_number')
+    modelName = serializers.CharField(source='model_name')
+
+
+
+class PiBaseRecordGetSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PiBaseRecord model, including schematic image data.
+    """
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
+
+    class Meta:
+        model = PiBaseRecord
+        fields = '__all__'
+        extra_fields = ['schematicData']
+
+    def to_representation(self, instance):
+        try:
+            representation = super().to_representation(instance)
+            return representation
+        except Exception as e:
+            raise serializers.ValidationError(f"Error serializing PiBaseRecord: {e}")
+
+class PiBaseRecordFullSerializer(serializers.ModelSerializer):
+    """
+    Full-featured serializer for PiBaseRecord, with field aliases, validation,
+    nested and related fields, and custom create/update logic.
+    """
+    # Field aliases
+    opNumber = serializers.CharField(source='op_number')
+    opuNumber = serializers.CharField(source='opu_number')
+    eduNumber = serializers.CharField(source='edu_number')
+    modelName = serializers.CharField(source='model_name')
+
+    # Foreign key fields
+    modelFamily = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Model Family'),
+        source='model_family', required=False, allow_null=True
+    )
+    technology = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.all(), required=False, allow_null=True
+    )
+    status = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseStatus.objects.all(), default=1
+    )
+
+    # Input fields (raw)
+    impedance = serializers.CharField(write_only=True,required=False, allow_blank=True)
+    customImpedance = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    caseStyleType = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    caseStyle = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    caseDimensions = serializers.JSONField(write_only=True, required=False)
+    ports = serializers.JSONField(write_only=True, required=False)
+    enclosureDetails = serializers.JSONField(write_only=True, required=False)
+    topcoverDetails = serializers.JSONField(write_only=True, required=False)
+
+    # Dropdowns
+    bottomSolderMask = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Bottom Solder Mask'),
+        source='bottom_solder_mask', required=False, allow_null=True
+    )
+    halfMoonRequirement = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Half Moon Requirement'),
+        source='half_moon_requirement', required=False, allow_null=True
+    )
+    viaHolesRequirement = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Via Holes Requirement'),
+        source='via_holes_requirement', required=False, allow_null=True
+    )
+    signalLaunchType = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Signal Launch Type'),
+        source='signal_launch_type', required=False, allow_null=True
+    )
+    coverType = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Cover Type'),
+        source='cover_type', required=False, allow_null=True
+    )
+    designRuleViolation = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseFieldOption.objects.filter(category__name='Design Rule Violation'),
+        source='design_rule_violation', required=False, allow_null=True
+    )
+
+    # Nested JSON fields
+    impedanceSelection = serializers.JSONField(source='impedance_selection', required=False)
+    interfaces = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    caseStyleData = serializers.JSONField(source='case_style_data', required=False)
+    can = serializers.JSONField(source='can_details', required=False)
+    pcbList = serializers.JSONField(source='pcb_details', required=False)
+    chipAirCoils = serializers.JSONField(source='chip_aircoil_details', required=False)
+    chipInductors = serializers.JSONField(source='chip_inductor_details', required=False)
+    chipCapacitors = serializers.JSONField(source='chip_capacitor_details', required=False)
+    chipResistors = serializers.JSONField(source='chip_resistor_details', required=False)
+    transformers = serializers.JSONField(source='transformer_details', required=False)
+    shieldList = serializers.JSONField(source='shield_details', required=False)
+    fingerList = serializers.JSONField(source='finger_details', required=False)
+    copperFlapList = serializers.JSONField(source='copper_flaps_details', required=False)
+    resonatorList = serializers.JSONField(source='resonator_details', required=False)
+    ltccList = serializers.JSONField(source='ltcc_details', required=False)
+
+    selectedComponents = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseComponent.objects.all(), source='components', many=True, required=False
+    )
+
+    schematicFile = serializers.PrimaryKeyRelatedField(
+        queryset=PiBaseImage.objects.all(), source='schematic', required=False, allow_null=True
+    )
+
+    schematicData = PiBaseImageSerializer(source='schematic', read_only=True)
+
+    similarModel = serializers.CharField(source='similar_model_layout', required=False, allow_blank=True)
+    specialRequirements = serializers.CharField(source='special_requirements', required=False, allow_blank=True)
+
+    class Meta:
+        model = PiBaseRecord
+        fields = [
+            'id', 'opNumber', 'opuNumber', 'eduNumber', 'modelName', 'modelFamily',
+            'technology', 'status', 'revision_number',
+            'impedance', 'customImpedance', 'interfaces', 'caseStyleType', 'caseStyle',
+            'caseDimensions', 'ports', 'enclosureDetails', 'topcoverDetails',
+            'bottomSolderMask', 'halfMoonRequirement', 'viaHolesRequirement',
+            'signalLaunchType', 'coverType', 'designRuleViolation',
+            'impedanceSelection',  'caseStyleData',
+            'can', 'pcbList', 'chipAirCoils', 'chipInductors',
+            'chipCapacitors', 'chipResistors', 'transformers',
+            'shieldList', 'fingerList', 'copperFlapList', 'resonatorList',
+            'ltccList', 'selectedComponents', 'schematicFile','schematicData',
+            'similarModel', 'specialRequirements', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'revision_number' ,'created_at', 'updated_at']
+
+    def validate(self, data):
+        """
+        Validates the uniqueness of the combination:
+        op_number, opu_number, edu_number, and model_name.
+        """
+        try:
+            instance = getattr(self, 'instance', None)
+
+            op_number = data.get('op_number') or (instance.op_number if instance else None)
+            opu_number = data.get('opu_number') or (instance.opu_number if instance else None)
+            edu_number = data.get('edu_number') or (instance.edu_number if instance else None)
+            model_name = data.get('model_name') or (instance.model_name if instance else None)
+
+            # Combination uniqueness check
+            if all([op_number, opu_number, edu_number, model_name]):
+                qs = PiBaseRecord.objects.filter(
+                    op_number=op_number,
+                    opu_number=opu_number,
+                    edu_number=edu_number,
+                    model_name=model_name
+                )
+                if instance:
+                    qs = qs.exclude(pk=instance.pk)
+
+                if qs.exists():
+                    raise serializers.ValidationError(
+                        "A PiBaseRecord with this combination already exists."
+                    )
+
+            return data
+
+        except Exception as e:
+            raise serializers.ValidationError(f"Validation error: {e}")
+
+
+    def assign_json_fields(self, instance):
+        """
+        Assigns JSON fields from initial data to the instance.
+        """
+        try:
+            instance.impedance_selection = {
+                "impedance": self.initial_data.get("impedance"),
+                "customImpedance": self.initial_data.get("customImpedance")
+            }
+            instance.interfaces_details = {
+                "interfaces": self.initial_data.get("interfaces"),
+                "ports": self.initial_data.get("ports"),
+                "enclosureDetails": self.initial_data.get("enclosureDetails"),
+                "topcoverDetails": self.initial_data.get("topcoverDetails")
+            }
+            instance.case_style_data = {
+                "caseStyleType": self.initial_data.get("caseStyleType"),
+                "caseStyle": self.initial_data.get("caseStyle"),
+                "caseDimensions": self.initial_data.get("caseDimensions"),
+            }
+        except Exception as e:
+            raise serializers.ValidationError(f"Error assigning JSON fields: {e}")
+
+    def create(self, validated_data):
+        """
+        Creates a new PiBaseRecord instance, handling custom and JSON fields.
+        """
+        try:
+            user = self.context['request'].user
+            components = validated_data.pop('components', [])
+            validated_data.pop("impedance", None)
+            validated_data.pop("customImpedance", None)
+            validated_data.pop("interfaces", None)
+            validated_data.pop("caseStyleType", None)
+            validated_data.pop("caseStyle", None)
+            validated_data.pop("caseDimensions", None)
+            validated_data.pop("ports", None)
+            validated_data.pop("enclosureDetails", None)
+            validated_data.pop("topcoverDetails", None)
+            validated_data['created_by'] = user
+            validated_data['updated_by'] = user
+            validated_data['revision_number'] = "1"
+            instance = PiBaseRecord.objects.create(**validated_data)
+            self.assign_json_fields(instance)
+            instance.save()
+            if components:
+                instance.components.set(components)
+            return instance
+        except Exception as e:
+            raise serializers.ValidationError(f"Error creating PiBaseRecord: {e}")
+
+    def update(self, instance, validated_data):
+        """
+        Updates an existing PiBaseRecord instance, handling custom and JSON fields.
+        """
+        try:
+             # Check if current instance status is 'Pending'
+            if instance.status.id != 1:
+                raise serializers.ValidationError("This record cannot be edited because it is not in 'Pending' status.")
+            user = self.context['request'].user
+            components = validated_data.pop('components', None)
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            self.assign_json_fields(instance)
+            instance.updated_by = user
+            try:
+                instance.revision_number = str(int(instance.revision_number) + 1)
+            except (ValueError, TypeError):
+                instance.revision_number = "1"
+            instance.save()
+            if components is not None:
+                instance.components.set(components)
+            return instance
+        except Exception as e:
+            raise serializers.ValidationError(f"Error updating PiBaseRecord: {e}")
+

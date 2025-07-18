@@ -16,7 +16,7 @@ def get_users():
         raise ex
 
 
-def update_user(data,pk):
+def update_user(data, pk):
     try:
         user = CustomUser.objects.get(pk=pk)
         serializer = UpdateUserSerializer(user, data=data)
@@ -32,6 +32,7 @@ def update_user(data,pk):
     except Exception as ex:
         authentication_logs.error(f"Error: {ex}")
         raise ex
+
 
 
 def delete_user(pk):

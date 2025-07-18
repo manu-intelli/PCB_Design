@@ -18,6 +18,10 @@ SERVER_TYPE = os.getenv('SERVER_TYPE', 'LOCAL').upper()
 
 SERVER_NAME = os.getenv('SERVER_NAME',"LOCAL")
 
+ODBC_DRIVER = os.getenv('ODBC_DRIVER', '17')
+
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://127.0.0.1:5173").split(',')
+
 # Debug mode: Set to True for local development
 DEBUG = True
 
@@ -26,12 +30,7 @@ FRONTEND_IP = os.getenv("FRONTEND_IP", "http://localhost")
 FRONTEND_PORT = os.getenv("FRONTEND_PORT", "5173")
 
 # Configure allowed hosts based on the environment
-if SERVER_TYPE == 'LOCAL':
-    # Only allow localhost for local development
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-else:
-    # For live servers, allow the production URL and frontend IP
-    ALLOWED_HOSTS = ['pcb-design-5nqf.onrender.com','localhost', os.getenv('FRONTEND_IP', '*'),os.getenv('BACKEND_IP', '*')]
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # List of installed apps required for the project
 INSTALLED_APPS = [
@@ -49,6 +48,9 @@ INSTALLED_APPS = [
     'right_to_draw',  # Custom app (your app)
     'authentication',  # Custom authentication app
     'masters',  # Custom app for managing master data
+    'pibase',  # Custom app for managing PiBase records
+    'pibase_makebill',  # Custom app for managing Make Bill records
+    'thelifi',
 ]
 
 # Middleware configuration
@@ -73,7 +75,7 @@ ROOT_URLCONF = 'pcb_design.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],  # Add your template directories here if required
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  # Add your template directories here if required
         'APP_DIRS': True,  # Enable app-specific template directories
         'OPTIONS': {
             'context_processors': [
@@ -93,7 +95,7 @@ WSGI_APPLICATION = 'pcb_design.wsgi.application'
 AUTH_USER_MODEL = 'authentication.CustomUser'
 
 # Database configuration
-ODBC_DRIVER =  'ODBC Driver 17 for SQL Server' if SERVER_TYPE == 'LOCAL' else 'ODBC Driver 17 for SQL Server' if SERVER_NAME == 'PRODUCTION' else 'ODBC Driver 13 for SQL Server'
+ODBC_DRIVER_V =  f'ODBC Driver {ODBC_DRIVER} for SQL Server' 
 
 DATABASES = {
     'default': {
@@ -104,7 +106,7 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST'),  # Database host from .env
         'PORT': os.getenv('DB_PORT'),  # Database port from .env
         'OPTIONS': {
-            'driver': ODBC_DRIVER,  # Choose the appropriate ODBC driver
+            'driver': ODBC_DRIVER_V,  # Choose the appropriate ODBC driver
             'autocommit': True,  # Enable autocommit for transactions
             'extra_params': 'DataTypeCompatibility=80;MARS Connection=True;',  # MS SQL options
             'use_legacy_date_fields': True,  # Legacy date fields support
@@ -128,6 +130,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'authentication.custom_permissions.IsAuthorized',  # Custom permission class
     ),
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
 
 # JWT token expiration settings
@@ -146,25 +149,29 @@ USE_TZ = True  # Enable timezone support
 STATIC_URL = '/static/'  # URL path for static files
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # Directory to store static files
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
 # Default auto field type for primary keys
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # URL append slash setting
 APPEND_SLASH = False
 
-# CORS settings to handle cross-origin requests
-if SERVER_TYPE == 'LOCAL':
-    CORS_ALLOWED_ORIGINS = [
-        'http://127.0.0.1:5173',  # Allow local development frontend
-        'http://localhost:5173',  # Allow localhost development frontend
-        f"{FRONTEND_IP}:{FRONTEND_PORT}",
-    ]
-else:
-    CORS_ALLOWED_ORIGINS = [
-        f"{FRONTEND_IP}:{FRONTEND_PORT}",  # Allow frontend configured in .env for production
-         'http://localhost:5173' if SERVER_NAME == 'DEV' else ''
-    ]
-
 # Allow credentials in CORS requests
 CORS_ALLOW_CREDENTIALS = True
+
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': "JWT Authorization header using the Bearer scheme. Example: 'Bearer <token>'"
+        }
+    },
+    'USE_SESSION_AUTH': False,
+}
 
