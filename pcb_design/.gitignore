@@ -11,3 +11,5 @@ logs
 /logs
 
 media
+
+.env

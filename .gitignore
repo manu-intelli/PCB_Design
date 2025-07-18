@@ -15,3 +15,5 @@ web.config
 .env
 .env.uat
 .env.prod
+
+media
