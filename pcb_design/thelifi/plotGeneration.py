@@ -257,7 +257,7 @@ def generate_s11_return_loss_plot(
         str: Filename of the saved plot.
     """
     try:
-        plt.figure(figsize=(20, 9))
+        plt.figure(figsize=(12, 6))
 
         num_files = len(networks)
         color_norm = mcolors.Normalize(vmin=0, vmax=num_files - 1)
@@ -481,7 +481,7 @@ def generate_s22_return_loss_plot(networks, plot_config, kpi_config, sim_data, f
         str: Filename of the saved plot.
     """
     try:
-        plt.figure(figsize=(20, 9))
+        plt.figure(figsize=(12, 6))
 
         num_files = len(networks)
         color_norm = mcolors.Normalize(vmin=0, vmax=num_files - 1)
@@ -649,7 +649,7 @@ def generate_s21_insertion_loss_plot(networks, plot_config, kpi_config, sim_data
         str: Filename of the saved plot.
     """
     try:
-        plt.figure(figsize=(20, 9))
+        plt.figure(figsize=(12, 6))
 
         num_files = len(networks)
         color_norm = mcolors.Normalize(vmin=0, vmax=num_files - 1)
@@ -849,7 +849,7 @@ def generate_s21_rejection_loss_plot(networks, plot_config, kpi_config, sim_data
         str: Filename of the saved plot.
     """
     try:
-        plt.figure(figsize=(20, 9))
+        plt.figure(figsize=(12, 6))
 
         num_files = len(networks)
         color_norm = mcolors.Normalize(vmin=0, vmax=num_files - 1)
@@ -1061,7 +1061,7 @@ def generate_group_delay_plot(networks, plot_config, kpi_config, sim_data, freq_
             gd_s = -np.gradient(ang) / (2 * np.pi * (df + 1e-12))
             return ang, gd_s * 1e9  # Convert to ns
 
-        plt.figure(figsize=(20, 9))
+        plt.figure(figsize=(12, 6))
 
         num_files = len(networks)
         color_norm = mcolors.Normalize(vmin=0, vmax=num_files - 1)

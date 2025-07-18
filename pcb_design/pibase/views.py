@@ -323,18 +323,13 @@ class GroupedFieldOptionsView(APIView):
 
 class CheckPiBaseRecordUniqueView(APIView):
     """
-    API endpoint to check uniqueness of PiBaseRecord fields in the database.
+    API endpoint to check uniqueness of PiBaseRecord field combinations in the database.
     Accepts op_number, opu_number, edu_number, and model_name in POST data.
-    Returns uniqueness status and message for each field.
+    Returns whether the combination is unique or already exists.
     """
 
     @swagger_auto_schema(request_body=PiBaseRecordUniquenessSerializer)
     def post(self, request, *args, **kwargs):
-        """
-        Handles POST requests to check the uniqueness of specified PiBaseRecord fields.
-        Validates input data and checks database for existing records.
-        Logs success, warning, and error events.
-        """
         try:
             serializer = PiBaseRecordUniquenessSerializer(data=request.data)
             if serializer.is_valid():
@@ -343,39 +338,29 @@ class CheckPiBaseRecordUniqueView(APIView):
                 edu_number = serializer.validated_data.get("edu_number")
                 model_name = serializer.validated_data.get("model_name")
 
-                results = {
-                    "op_number": {
-                        "unique": not PiBaseRecord.objects.filter(op_number=op_number).exists(),
-                    },
-                    "opu_number": {
-                        "unique": not PiBaseRecord.objects.filter(opu_number=opu_number).exists(),
-                    },
-                    "edu_number": {
-                        "unique": not PiBaseRecord.objects.filter(edu_number=edu_number).exists(),
-                    },
-                    "model_name": {
-                        "unique": not PiBaseRecord.objects.filter(
-                            model_name=model_name
-                        ).exists(),
-                    },
+                # Check for uniqueness of the combination
+                exists = PiBaseRecord.objects.filter(
+                    op_number=op_number,
+                    opu_number=opu_number,
+                    edu_number=edu_number,
+                    model_name=model_name
+                ).exists()
+
+                result = {
+                    "unique": not exists,
+                    "message": "Combination is unique." if not exists else "Combination already exists."
                 }
 
-                # Add helpful message per field
-                for field, result in results.items():
-                    result["message"] = (
-                        f"{field} is unique."
-                        if result["unique"]
-                        else f"{field} already exists."
-                    )
-
-                pi_base_logs.info("Successfully checked uniqueness for PiBaseRecord fields.")
-                return Response(results, status=status.HTTP_200_OK)
+                pi_base_logs.info("Successfully checked combination uniqueness for PiBaseRecord.")
+                return Response(result, status=status.HTTP_200_OK)
 
             pi_base_logs.warning(f"Invalid data received for uniqueness check: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
             pi_base_logs.error(f"Error in CheckPiBaseRecordUniqueView.post: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # =====================================================================================================================================
 

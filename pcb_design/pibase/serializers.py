@@ -274,44 +274,38 @@ class PiBaseRecordFullSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        Validates uniqueness of op_number, opu_number, edu_number, and model_name.
+        Validates the uniqueness of the combination:
+        op_number, opu_number, edu_number, and model_name.
         """
         try:
-            errors = {}
             instance = getattr(self, 'instance', None)
-            op_number = data.get('op_number', instance.op_number if instance else None)
-            opu_number = data.get('opu_number', instance.opu_number if instance else None)
-            edu_number = data.get('edu_number', instance.edu_number if instance else None)
-            model_name = data.get('model_name', instance.model_name if instance else None)
-            if op_number:
-                qs = PiBaseRecord.objects.filter(op_number=op_number)
+
+            op_number = data.get('op_number') or (instance.op_number if instance else None)
+            opu_number = data.get('opu_number') or (instance.opu_number if instance else None)
+            edu_number = data.get('edu_number') or (instance.edu_number if instance else None)
+            model_name = data.get('model_name') or (instance.model_name if instance else None)
+
+            # Combination uniqueness check
+            if all([op_number, opu_number, edu_number, model_name]):
+                qs = PiBaseRecord.objects.filter(
+                    op_number=op_number,
+                    opu_number=opu_number,
+                    edu_number=edu_number,
+                    model_name=model_name
+                )
                 if instance:
                     qs = qs.exclude(pk=instance.pk)
+
                 if qs.exists():
-                    errors['opNumber'] = 'OP Number already exists.'
-            if opu_number:
-                qs = PiBaseRecord.objects.filter(opu_number=opu_number)
-                if instance:
-                    qs = qs.exclude(pk=instance.pk)
-                if qs.exists():
-                    errors['opuNumber'] = 'OPU Number already exists.'
-            if edu_number:
-                qs = PiBaseRecord.objects.filter(edu_number=edu_number)
-                if instance:
-                    qs = qs.exclude(pk=instance.pk)
-                if qs.exists():
-                    errors['eduNumber'] = 'EDU Number already exists.'
-            if model_name:
-                qs = PiBaseRecord.objects.filter(model_name=model_name)
-                if instance:
-                    qs = qs.exclude(pk=instance.pk)
-                if qs.exists():
-                    errors['modelName'] = 'Model Name already exists.'
-            if errors:
-                raise serializers.ValidationError(errors)
+                    raise serializers.ValidationError(
+                        "A PiBaseRecord with this combination already exists."
+                    )
+
             return data
+
         except Exception as e:
             raise serializers.ValidationError(f"Validation error: {e}")
+
 
     def assign_json_fields(self, instance):
         """
